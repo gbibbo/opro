@@ -1,0 +1,115 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# Conda
+*.conda
+*.tar.bz2
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Data (keep structure, ignore content)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/segments/*
+!data/segments/.gitkeep
+data/cache/*
+!data/cache/.gitkeep
+
+# Models and checkpoints
+*.pt
+*.pth
+*.bin
+*.safetensors
+checkpoints/
+models/
+wandb/
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS
+Thumbs.db
+.DS_Store
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Ruff
+.ruff_cache/
+
+# Environment variables
+.env
+.env.local
+
+# Large files
+*.wav
+*.mp3
+*.mp4
+*.avi
+*.flac
+
+# Dataset-specific (keep configs)
+configs/datasets/*.yaml
+!configs/datasets/.gitkeep
+
+# Experiment results
+results/
+outputs/
+assets/paper_figs/*
+!assets/paper_figs/.gitkeep
+
+# Coverage reports
+.coverage.*
+coverage.xml
