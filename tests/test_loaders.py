@@ -7,6 +7,28 @@ from pathlib import Path
 import pandas as pd
 import tempfile
 import yaml
+import logging
+from datetime import datetime
+
+# Configure logging to file
+log_dir = Path(__file__).parent.parent / "logs"
+log_dir.mkdir(exist_ok=True)
+log_file = log_dir / f"test_loaders_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+logger.info("="*80)
+logger.info("Starting test_loaders.py")
+logger.info(f"Log file: {log_file}")
+logger.info("="*80)
 
 from qsm.data.loaders import (
     FrameTable,
@@ -56,6 +78,7 @@ def mock_ava_csv(temp_dir):
 
 def test_frame_table_creation():
     """Test FrameTable creation and validation."""
+    logger.info("Running test_frame_table_creation")
     data = pd.DataFrame({
         "uri": ["file_1", "file_1", "file_2"],
         "start_s": [0.0, 5.0, 1.0],
@@ -70,10 +93,12 @@ def test_frame_table_creation():
     assert len(ft.data) == 3
     assert len(ft.speech_segments) == 2
     assert len(ft.nonspeech_segments) == 1
+    logger.info("[PASS] test_frame_table_creation")
 
 
 def test_frame_table_missing_column():
     """Test FrameTable raises error for missing columns."""
+    logger.info("Running test_frame_table_missing_column")
     data = pd.DataFrame({
         "uri": ["file_1"],
         "start_s": [0.0],
@@ -83,10 +108,12 @@ def test_frame_table_missing_column():
 
     with pytest.raises(ValueError, match="Missing required column"):
         FrameTable(data=data)
+    logger.info("[PASS] test_frame_table_missing_column")
 
 
 def test_load_rttm_dataset(mock_rttm_file):
     """Test loading RTTM dataset."""
+    logger.info("Running test_load_rttm_dataset")
     ft = load_rttm_dataset(
         rttm_path=mock_rttm_file,
         dataset_name="test_rttm",
@@ -101,10 +128,12 @@ def test_load_rttm_dataset(mock_rttm_file):
 
     # Check URIs
     assert "file_001" in ft.data["uri"].values or "file_002" in ft.data["uri"].values
+    logger.info("[PASS] test_load_rttm_dataset")
 
 
 def test_load_ava_speech(mock_ava_csv):
     """Test loading AVA-Speech dataset."""
+    logger.info("Running test_load_ava_speech")
     ft = load_ava_speech(
         annotations_path=mock_ava_csv,
         dataset_name="ava_test",
@@ -121,10 +150,12 @@ def test_load_ava_speech(mock_ava_csv):
 
     # Check time conversion (25 fps)
     assert ft.data["end_s"].max() <= 1.0  # 10 frames / 25 fps = 0.4s
+    logger.info("[PASS] test_load_ava_speech")
 
 
 def test_iter_intervals():
     """Test interval iteration."""
+    logger.info("Running test_iter_intervals")
     data = pd.DataFrame({
         "uri": ["file_1", "file_1", "file_1"],
         "start_s": [0.0, 5.0, 10.0],
@@ -144,10 +175,12 @@ def test_iter_intervals():
     assert intervals[0].end == 4.0
     assert intervals[1].start == 10.0
     assert intervals[1].end == 14.0
+    logger.info("[PASS] test_iter_intervals")
 
 
 def test_frame_table_save_load(temp_dir):
     """Test saving and loading FrameTable."""
+    logger.info("Running test_frame_table_save_load")
     data = pd.DataFrame({
         "uri": ["file_1"],
         "start_s": [0.0],
@@ -169,10 +202,12 @@ def test_frame_table_save_load(temp_dir):
 
     assert len(ft_loaded.data) == len(ft.data)
     assert all(ft_loaded.data["uri"] == ft.data["uri"])
+    logger.info("[PASS] test_frame_table_save_load")
 
 
 def test_prototype_mode_limiting(mock_rttm_file, monkeypatch):
     """Test that PROTOTYPE_MODE limits data."""
+    logger.info("Running test_prototype_mode_limiting")
     # Mock PROTOTYPE_MODE and PROTOTYPE_SAMPLES
     import qsm.data.loaders as loaders_module
     monkeypatch.setattr(loaders_module, "PROTOTYPE_MODE", True)
@@ -187,3 +222,8 @@ def test_prototype_mode_limiting(mock_rttm_file, monkeypatch):
     # Should limit to 1 URI
     unique_uris = ft.data["uri"].nunique()
     assert unique_uris <= 1
+    logger.info("[PASS] test_prototype_mode_limiting")
+
+logger.info("="*80)
+logger.info("Completed test_loaders.py")
+logger.info("="*80)

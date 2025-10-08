@@ -86,7 +86,22 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
-### 2. Download Prototype Data
+### 2. Run Tests with Automatic Logging ✨
+
+**NEW:** All tests now automatically save output to timestamped log files in `logs/` directory.
+
+```bash
+# Run comprehensive test suite (recommended)
+python scripts/run_all_tests.py
+
+# Or run tests individually
+python scripts/smoke_test.py    # Quick validation (<30s)
+pytest -v                       # Unit tests
+```
+
+**All output is saved to `logs/` for review!**
+
+### 3. Download Prototype Data
 
 In **PROTOTYPE_MODE**, this downloads only 5 examples per dataset:
 
@@ -99,32 +114,18 @@ This will:
 - Generate dataset configuration YAMLs in `configs/datasets/`
 - Set up directory structure in `data/`
 
-### 3. Run Smoke Test
-
-Verify the installation:
+### 4. Check Test Results
 
 ```bash
-python scripts/smoke_test.py
+# View latest test run
+ls -t logs/test_run_*.log | head -1 | xargs cat
+
+# View specific logs
+cat logs/smoke_test_*.log
+cat logs/pytest_*.log
 ```
 
-This runs in <30 seconds and validates:
-- Configuration loading
-- Data structure creation
-- Slicing functionality
-- Directory setup
-
-### 4. Run Tests
-
-```bash
-# Run all tests
-pytest -v
-
-# Run with coverage
-pytest --cov=qsm --cov-report=html
-
-# Run specific test file
-pytest tests/test_loaders.py -v
-```
+**See [TESTING_GUIDE.md](TESTING_GUIDE.md) for complete testing instructions.**
 
 ## Configuration
 
@@ -166,13 +167,18 @@ rttm_path:
 
 ## Development Workflow
 
-### Sprint 0: Infrastructure ✓
+### Sprint 0: Infrastructure ✓ (COMPLETE)
 - [x] Project structure
 - [x] Configuration system with PROTOTYPE_MODE
 - [x] Data loaders skeleton
 - [x] Download scripts
 - [x] Testing framework
 - [x] Smoke test
+- [x] **✨ Automatic logging for all tests**
+- [x] **✨ Comprehensive test runner**
+- [x] Complete documentation
+
+**See [SPRINT0_SUMMARY.md](SPRINT0_SUMMARY.md) for details.**
 
 ### Sprint 1: Dataset Ingestion (NEXT)
 - [ ] Implement RTTM loaders (DIHARD, VoxConverse)
@@ -267,18 +273,38 @@ All loaders convert to unified `FrameTable` format for consistent processing.
 
 ## Testing
 
-### Unit Tests
+### Comprehensive Test Runner (Recommended)
+
+```bash
+python scripts/run_all_tests.py
+```
+
+Runs all tests and saves logs to `logs/` directory:
+- Smoke test
+- Unit tests (pytest)
+- Code quality (ruff, black)
+- Import verification
+
+### Individual Tests
 
 ```bash
 pytest tests/test_loaders.py    # Data loading
 pytest tests/test_slicing.py    # Segment slicing
-```
-
-### Smoke Test
-
-```bash
 python scripts/smoke_test.py    # Quick validation (<30s)
 ```
+
+### Automatic Logging ✨
+
+All test scripts now automatically save output to `logs/` directory:
+```
+logs/
+├── test_run_YYYYMMDD_HHMMSS.log        # Master log
+├── smoke_test_YYYYMMDD_HHMMSS.log      # Smoke test output
+├── pytest_YYYYMMDD_HHMMSS.log          # Unit test output
+└── ...
+```
+
+**See [TESTING_GUIDE.md](TESTING_GUIDE.md) for complete instructions.**
 
 ### CI/CD
 
@@ -337,13 +363,20 @@ Apache-2.0 (matching Qwen model licenses)
 }
 ```
 
+## Documentation
+
+- **[QUICKSTART.md](QUICKSTART.md)** - 1-minute quick reference
+- **[SPRINT0_SUMMARY.md](SPRINT0_SUMMARY.md)** - What was implemented in Sprint 0
+- **[EVALUATION.md](EVALUATION.md)** - Detailed acceptance criteria
+- **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - How to run tests with logging
+
 ## Contributing
 
 1. Install dev dependencies: `pip install -e ".[dev]"`
-2. Run tests: `pytest -v`
-3. Format code: `black src/ tests/`
-4. Lint: `ruff check src/ tests/`
-5. Ensure smoke test passes: `python scripts/smoke_test.py`
+2. Run all tests: `python scripts/run_all_tests.py`
+3. Check logs: `ls logs/`
+4. Format code: `black src/ tests/`
+5. Lint: `ruff check src/ tests/`
 
 ## Troubleshooting
 
@@ -361,10 +394,33 @@ Check that:
 2. You've run `python scripts/download_datasets.py`
 3. Dataset configs exist in `configs/datasets/`
 
+### Test Failures
+
+1. Check logs in `logs/` directory for detailed error messages
+2. Run `python scripts/run_all_tests.py` for comprehensive diagnostics
+3. See [TESTING_GUIDE.md](TESTING_GUIDE.md) for troubleshooting
+
 ### GPU Out of Memory
 
 For prototyping, the 5-example limit should prevent OOM. For full datasets, adjust batch sizes in `config.yaml`.
 
 ---
 
-**Status**: Sprint 0 Complete ✓ | Ready for Sprint 1 (Dataset Ingestion)
+## Sprint 0 Status: ✅ COMPLETE
+
+**Key achievements:**
+- ✅ Complete project infrastructure
+- ✅ Configuration system with PROTOTYPE_MODE
+- ✅ Data loaders and slicing
+- ✅ Comprehensive testing framework
+- ✅ **Automatic logging for all tests**
+- ✅ **Test runner script**
+- ✅ Complete documentation
+
+**See [SPRINT0_SUMMARY.md](SPRINT0_SUMMARY.md) for full details.**
+
+**Ready for:** Sprint 1 (Dataset Ingestion)
+
+---
+
+**Quick Reference:** See [QUICKSTART.md](QUICKSTART.md) for common commands.

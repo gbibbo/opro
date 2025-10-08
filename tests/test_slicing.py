@@ -7,6 +7,28 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 from pyannote.core import Segment
+import logging
+from datetime import datetime
+
+# Configure logging to file
+log_dir = Path(__file__).parent.parent / "logs"
+log_dir.mkdir(exist_ok=True)
+log_file = log_dir / f"test_slicing_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+logger.info("="*80)
+logger.info("Starting test_slicing.py")
+logger.info(f"Log file: {log_file}")
+logger.info("="*80)
 
 from qsm.data.slicing import (
     slice_segments_from_interval,
@@ -17,6 +39,7 @@ from qsm.data.slicing import (
 
 def test_slice_segments_from_interval():
     """Test slicing segments from an interval."""
+    logger.info("Running test_slice_segments_from_interval")
     # Create a 10-second interval
     interval = Segment(0.0, 10.0)
 
@@ -36,10 +59,12 @@ def test_slice_segments_from_interval():
     # Check last segment
     assert segments[-1].start == 9.9
     assert segments[-1].end == 10.0
+    logger.info("[PASS] test_slice_segments_from_interval")
 
 
 def test_slice_with_max_segments():
     """Test limiting number of segments."""
+    logger.info("Running test_slice_with_max_segments")
     interval = Segment(0.0, 10.0)
 
     segments = slice_segments_from_interval(
@@ -50,10 +75,12 @@ def test_slice_with_max_segments():
     )
 
     assert len(segments) == 10
+    logger.info("[PASS] test_slice_with_max_segments")
 
 
 def test_slice_interval_too_short():
     """Test that too-short intervals return empty list."""
+    logger.info("Running test_slice_interval_too_short")
     interval = Segment(0.0, 0.05)  # 50ms
 
     segments = slice_segments_from_interval(
@@ -63,10 +90,12 @@ def test_slice_interval_too_short():
     )
 
     assert len(segments) == 0
+    logger.info("[PASS] test_slice_interval_too_short")
 
 
 def test_balance_segments():
     """Test segment balancing."""
+    logger.info("Running test_balance_segments")
     # Create unbalanced dataset
     data = []
 
@@ -106,10 +135,12 @@ def test_balance_segments():
     noise_count = len(balanced[balanced["condition"] == "noise"])
 
     assert clean_count == noise_count == 20
+    logger.info("[PASS] test_balance_segments")
 
 
 def test_segment_metadata():
     """Test SegmentMetadata dataclass."""
+    logger.info("Running test_segment_metadata")
     meta = SegmentMetadata(
         uri="test_file",
         start_s=0.0,
@@ -125,10 +156,12 @@ def test_segment_metadata():
     assert meta.duration_ms == 100
     assert meta.label == "SPEECH"
     assert meta.condition == "clean"
+    logger.info("[PASS] test_segment_metadata")
 
 
 def test_slice_various_durations():
     """Test slicing at multiple target durations."""
+    logger.info("Running test_slice_various_durations")
     interval = Segment(0.0, 1.0)  # 1 second
 
     test_cases = [
@@ -151,9 +184,12 @@ def test_slice_various_durations():
         for seg in segments:
             assert abs(seg.duration - duration_ms / 1000.0) < 1e-6
 
+    logger.info("[PASS] test_slice_various_durations")
+
 
 def test_speech_nonspeech_mode():
     """Test that mode parameter is accepted."""
+    logger.info("Running test_speech_nonspeech_mode")
     interval = Segment(0.0, 1.0)
 
     # Should work for both modes
@@ -161,3 +197,8 @@ def test_speech_nonspeech_mode():
     nonspeech_segs = slice_segments_from_interval(interval, 100, mode="nonspeech")
 
     assert len(speech_segs) == len(nonspeech_segs) == 10
+    logger.info("[PASS] test_speech_nonspeech_mode")
+
+logger.info("="*80)
+logger.info("Completed test_slicing.py")
+logger.info("="*80)

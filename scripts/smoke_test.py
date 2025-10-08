@@ -10,14 +10,29 @@ Runs in <30 seconds with minimal data to validate:
 
 import sys
 from pathlib import Path
+from datetime import datetime
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import logging
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging to file and console
+log_dir = Path(__file__).parent.parent / "logs"
+log_dir.mkdir(exist_ok=True)
+log_file = log_dir / f"smoke_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
+
+logger.info(f"Smoke test log file: {log_file}")
 
 
 def test_imports():
@@ -30,14 +45,14 @@ def test_imports():
         from qsm.data import FrameTable, load_dataset
         from qsm.data.slicing import slice_segments_from_interval
 
-        logger.info(f"✓ Core imports successful")
+        logger.info("[PASS] Core imports successful")
         logger.info(f"  PROTOTYPE_MODE: {PROTOTYPE_MODE}")
         logger.info(f"  PROTOTYPE_SAMPLES: {PROTOTYPE_SAMPLES}")
 
         return True
 
     except ImportError as e:
-        logger.error(f"✗ Import failed: {e}")
+        logger.error(f"[FAIL] Import failed: {e}")
         return False
 
 
@@ -55,13 +70,13 @@ def test_config():
             if section not in CONFIG:
                 raise ValueError(f"Missing config section: {section}")
 
-        logger.info(f"✓ Configuration valid")
+        logger.info("[PASS] Configuration valid")
         logger.info(f"  Durations: {CONFIG['durations_ms']}")
 
         return True
 
     except Exception as e:
-        logger.error(f"✗ Config test failed: {e}")
+        logger.error(f"[FAIL] Config test failed: {e}")
         return False
 
 
@@ -89,12 +104,12 @@ def test_data_structures():
         assert len(ft.speech_segments) == 1
         assert len(ft.nonspeech_segments) == 0
 
-        logger.info(f"✓ Data structures working")
+        logger.info("[PASS] Data structures working")
 
         return True
 
     except Exception as e:
-        logger.error(f"✗ Data structure test failed: {e}")
+        logger.error(f"[FAIL] Data structure test failed: {e}")
         return False
 
 
@@ -117,12 +132,12 @@ def test_slicing():
         assert len(segments) == 10
         assert segments[0].duration == 0.1
 
-        logger.info(f"✓ Slicing working (created {len(segments)} segments)")
+        logger.info(f"[PASS] Slicing working (created {len(segments)} segments)")
 
         return True
 
     except Exception as e:
-        logger.error(f"✗ Slicing test failed: {e}")
+        logger.error(f"[FAIL] Slicing test failed: {e}")
         return False
 
 
@@ -147,12 +162,12 @@ def test_directory_structure():
             if not path.exists():
                 raise FileNotFoundError(f"Could not create: {dir_path}")
 
-        logger.info(f"✓ Directory structure valid")
+        logger.info("[PASS] Directory structure valid")
 
         return True
 
     except Exception as e:
-        logger.error(f"✗ Directory test failed: {e}")
+        logger.error(f"[FAIL] Directory test failed: {e}")
         return False
 
 
@@ -185,7 +200,7 @@ def main():
     all_passed = True
 
     for name, result in results:
-        status = "✓ PASS" if result else "✗ FAIL"
+        status = "[PASS]" if result else "[FAIL]"
         logger.info(f"{status}: {name}")
 
         if not result:
@@ -194,10 +209,10 @@ def main():
     logger.info("=" * 60)
 
     if all_passed:
-        logger.info("✓ ALL TESTS PASSED")
+        logger.info("[PASS] ALL TESTS PASSED")
         return 0
     else:
-        logger.error("✗ SOME TESTS FAILED")
+        logger.error("[FAIL] SOME TESTS FAILED")
         return 1
 
 
