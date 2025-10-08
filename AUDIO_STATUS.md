@@ -1,34 +1,36 @@
-# Audio Status - REAL AUDIO AVAILABLE! 🎉
+# Audio Status - 2.5 GB Real Audio Available! 🎉
 
-**Updated:** 2025-10-08 after successful downloads
-**Status:** ✅ 298 MB of real audio downloaded
+**Updated:** 2025-10-08 after VoxConverse download
+**Status:** ✅ 2.5 GB of real audio downloaded
 
 ---
 
-## ✅ AMI Corpus - 5 Files (298 MB)
+## ✅ Audio Datasets Downloaded
 
+### 1. AMI Corpus - 5 Files (298 MB)
 **Location:** `data/raw/ami/audio/`
+**Total:** ~38 minutes of meeting audio
 
-| File | Size | Duration | Description |
-|------|------|----------|-------------|
-| ES2002a.wav | 39 MB | ~5 min | Meeting part a |
-| ES2002b.wav | 70 MB | ~9 min | Meeting part b |
-| ES2002c.wav | 74 MB | ~9 min | Meeting part c |
-| ES2002d.wav | 81 MB | ~10 min | Meeting part d |
-| ES2003a.wav | 35 MB | ~5 min | Meeting part a |
-
-**Total:** ~38 minutes of real meeting audio
+### 2. VoxConverse - 216 Files (2.2 GB)
+**Location:** `data/raw/voxconverse/audio/dev/`
+**Total:** 216 WAV files from YouTube with speaker diarization
 
 ---
 
-## 🎧 Listen to Audio NOW
+## 📊 Total: 221 files, 2.5 GB
+
+**Ready for inference!** 🚀
+
+---
+
+## 🎧 Listen Now
 
 ```bash
-# Windows
+# AMI meeting
 start data/raw/ami/audio/ES2002a.wav
 
-# Linux/Mac
-vlc data/raw/ami/audio/ES2002a.wav
+# VoxConverse
+start data/raw/voxconverse/audio/dev/abjxc.wav
 ```
 
 ---
@@ -36,19 +38,9 @@ vlc data/raw/ami/audio/ES2002a.wav
 ## 📥 Download More
 
 ```bash
-# VoxConverse (YouTube audio)
-python scripts/download_datasets.py --datasets voxconverse
+# VoxConverse test set
+python scripts/download_voxconverse_audio.py --splits test
 
 # More AMI meetings
 python scripts/download_datasets.py --datasets ami --force-full
 ```
-
----
-
-## ❌ DIHARD Removed
-
-Removed from project due to expensive LDC license requirement.
-
----
-
-**You can now run inference on REAL AUDIO!** 🚀
