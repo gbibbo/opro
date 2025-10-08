@@ -7,10 +7,11 @@ Temporal threshold measurement and optimization for speech detection in Qwen mod
 ## 📊 Project Status
 
 - **Sprint 0 (Infrastructure):** ✅ **COMPLETE** - All tests passing
-- **Sprint 1 (Dataset Ingestion):** ✅ **COMPLETE** - Full audio datasets downloaded
+- **Sprint 1 (Dataset Ingestion):** ✅ **COMPLETE** - Prototype audio + full download scripts ready
 - **Sprint 2 (Segment Extraction):** 🔜 Ready to start
 - **Tests:** All passing (16/16) in <1 second
-- **Audio:** ✅ **2.5 GB real audio available** (AMI: 5 files, VoxConverse: 216 files)
+- **Audio (Prototype):** ✅ **343 MB** (AMI: 5 files, VoxConverse: 5 files) - 10 samples total
+- **Download Scripts:** ✅ Ready for full datasets (AMI, VoxConverse, AVA-ActiveSpeaker)
 - **Documentation:** Complete with 10+ guides
 - **Logging:** Automatic timestamped logs for all tests
 

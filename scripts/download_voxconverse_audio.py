@@ -4,15 +4,25 @@ Download VoxConverse pre-processed audio files directly.
 
 The official VoxConverse provides pre-processed WAV files instead of YouTube downloads.
 This is much more reliable than youtube-dl.
+
+IMPORTANT: Respects PROTOTYPE_MODE from config.yaml
+- PROTOTYPE_MODE=true: Downloads only 5 samples
+- PROTOTYPE_MODE=false: Downloads full dataset (use --force-full)
 """
 
 import argparse
 import logging
+import sys
 import zipfile
 from pathlib import Path
 
 import requests
 from tqdm import tqdm
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from qsm import PROTOTYPE_MODE, PROTOTYPE_SAMPLES
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -55,13 +65,14 @@ def extract_zip(zip_path: Path, extract_to: Path):
     logger.info(f"✅ Extracted to {extract_to}")
 
 
-def download_voxconverse_audio(data_root: Path, splits: list[str] = None):
+def download_voxconverse_audio(data_root: Path, splits: list[str] = None, prototype: bool = True):
     """
     Download VoxConverse pre-processed audio files.
 
     Args:
         data_root: Root directory for data storage
         splits: List of splits to download (dev, test). Default: both
+        prototype: If True, download only PROTOTYPE_SAMPLES files
     """
     if splits is None:
         splits = ["dev"]  # Only dev for prototype
@@ -120,7 +131,19 @@ def download_voxconverse_audio(data_root: Path, splits: list[str] = None):
                 if subdir.is_dir() and not list(subdir.iterdir()):
                     subdir.rmdir()
 
-            logger.info(f"✅ VoxConverse {split} ready!")
+            # PROTOTYPE MODE: Keep only N samples
+            if prototype:
+                all_wavs = sorted(audio_dir.glob("*.wav"))
+                if len(all_wavs) > PROTOTYPE_SAMPLES:
+                    logger.info(
+                        f"PROTOTYPE_MODE: Keeping only {PROTOTYPE_SAMPLES} files, removing {len(all_wavs) - PROTOTYPE_SAMPLES}"
+                    )
+                    for wav_file in all_wavs[PROTOTYPE_SAMPLES:]:
+                        wav_file.unlink()
+                        logger.debug(f"Removed {wav_file.name}")
+
+                remaining = len(list(audio_dir.glob("*.wav")))
+                logger.info(f"✅ VoxConverse {split} ready! ({remaining} files in PROTOTYPE_MODE)")
 
         except Exception as e:
             logger.error(f"❌ Failed to extract {split}: {e}")
@@ -134,7 +157,9 @@ def download_voxconverse_audio(data_root: Path, splits: list[str] = None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Download VoxConverse audio files")
+    parser = argparse.ArgumentParser(
+        description="Download VoxConverse audio files (respects PROTOTYPE_MODE)"
+    )
     parser.add_argument(
         "--splits",
         nargs="+",
@@ -145,10 +170,23 @@ def main():
     parser.add_argument(
         "--data-root", type=Path, default=Path("data/raw"), help="Data root directory"
     )
+    parser.add_argument(
+        "--force-full",
+        action="store_true",
+        help="Download full dataset even if PROTOTYPE_MODE=true",
+    )
 
     args = parser.parse_args()
 
-    download_voxconverse_audio(args.data_root, args.splits)
+    # Determine mode
+    prototype = PROTOTYPE_MODE and not args.force_full
+
+    if prototype:
+        logger.info(f"PROTOTYPE_MODE: Will keep only {PROTOTYPE_SAMPLES} files per split")
+    else:
+        logger.info("FULL MODE: Will download complete datasets")
+
+    download_voxconverse_audio(args.data_root, args.splits, prototype=prototype)
 
 
 if __name__ == "__main__":
