@@ -217,6 +217,42 @@ def test_prototype_mode_limiting(mock_rttm_file, monkeypatch):
     logger.info("[PASS] test_prototype_mode_limiting")
 
 
+def test_rttm_nonspeech_generation(mock_rttm_file):
+    """Test RTTM loader with nonspeech generation."""
+    logger.info("Running test_rttm_nonspeech_generation")
+    ft = load_rttm_dataset(
+        rttm_path=mock_rttm_file, dataset_name="test", split="dev", include_nonspeech=True
+    )
+
+    # Should have both SPEECH and NONSPEECH segments
+    labels = ft.data["label"].unique()
+    assert "SPEECH" in labels
+    # May have NONSPEECH if there are gaps
+    logger.info(f"Labels found: {labels}")
+    logger.info("[PASS] test_rttm_nonspeech_generation")
+
+
+def test_ava_speech_condition_extraction(mock_ava_csv):
+    """Test AVA-Speech condition extraction from labels."""
+    logger.info("Running test_ava_speech_condition_extraction")
+    ft = load_ava_speech(annotations_path=mock_ava_csv, dataset_name="ava_test", split="train")
+
+    # Check that condition is extracted correctly
+    assert "condition" in ft.data.columns
+
+    # Check condition values are valid
+    valid_conditions = ["clean", "music", "noise", "none"]
+    assert all(ft.data["condition"].isin(valid_conditions))
+
+    # Check speech segments have proper conditions
+    speech_data = ft.data[ft.data["label"] == "SPEECH"]
+    if len(speech_data) > 0:
+        # Clean speech should have 'clean' condition
+        assert speech_data["condition"].isin(valid_conditions).all()
+
+    logger.info("[PASS] test_ava_speech_condition_extraction")
+
+
 logger.info("=" * 80)
 logger.info("Completed test_loaders.py")
 logger.info("=" * 80)

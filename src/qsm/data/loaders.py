@@ -86,6 +86,7 @@ def load_rttm_dataset(
     uem_path: Path | None = None,
     dataset_name: str = "unknown",
     split: str = "train",
+    include_nonspeech: bool = False,
 ) -> FrameTable:
     """
     Load RTTM format annotations (DIHARD, VoxConverse).
@@ -95,28 +96,69 @@ def load_rttm_dataset(
         uem_path: Optional UEM file to filter valid regions
         dataset_name: Name of the dataset
         split: Data split (train/dev/test)
+        include_nonspeech: If True, generate nonspeech segments from gaps
 
     Returns:
-        FrameTable with speech segments
+        FrameTable with speech (and optionally nonspeech) segments
     """
     logger.info(f"Loading RTTM from {rttm_path}")
 
     # Load using pyannote
     annotations = load_rttm(rttm_path)
 
+    # Load UEM if provided
+    uem_timeline = None
+    if uem_path is not None and uem_path.exists():
+        from pyannote.database.util import load_uem
+
+        logger.info(f"Loading UEM from {uem_path}")
+        uem_timeline = load_uem(uem_path)
+
     rows = []
     for uri, annotation in annotations.items():
-        for segment, track, label in annotation.itertracks(yield_label=True):
+        # Get speech timeline
+        speech_timeline = annotation.get_timeline()
+
+        # Filter by UEM if provided
+        if uem_timeline is not None and uri in uem_timeline:
+            valid_regions = uem_timeline[uri]
+            speech_timeline = speech_timeline.crop(valid_regions)
+
+        # Add speech segments
+        for segment in speech_timeline:
             rows.append(
                 {
                     "uri": uri,
                     "start_s": segment.start,
                     "end_s": segment.end,
-                    "label": "SPEECH",  # RTTM segments are speech by default
+                    "label": "SPEECH",
                     "split": split,
                     "dataset": dataset_name,
                 }
             )
+
+        # Add nonspeech segments if requested
+        if include_nonspeech:
+            # Determine full extent
+            if uem_timeline is not None and uri in uem_timeline:
+                full_extent = uem_timeline[uri].extent()
+            else:
+                full_extent = speech_timeline.extent()
+
+            # Get gaps (nonspeech)
+            nonspeech_timeline = Timeline([full_extent]).gaps(speech_timeline)
+
+            for segment in nonspeech_timeline:
+                rows.append(
+                    {
+                        "uri": uri,
+                        "start_s": segment.start,
+                        "end_s": segment.end,
+                        "label": "NONSPEECH",
+                        "split": split,
+                        "dataset": dataset_name,
+                    }
+                )
 
     df = pd.DataFrame(rows)
 
@@ -135,23 +177,28 @@ def load_ava_speech(
     """
     Load AVA-Speech frame-level annotations.
 
-    Format: CSV with columns [video_id, frame_timestamp, label, condition]
+    Format: CSV with columns [video_id, frame_timestamp, label]
     Labels: SPEECH_CLEAN, SPEECH_WITH_MUSIC, SPEECH_WITH_NOISE, NO_SPEECH
+
+    Returns:
+        FrameTable with speech/nonspeech labels and acoustic conditions
     """
     logger.info(f"Loading AVA-Speech from {annotations_path}")
 
     df = pd.read_csv(annotations_path)
 
-    # Map labels to binary SPEECH/NONSPEECH
-    df["label"] = df["label"].apply(lambda x: "SPEECH" if "SPEECH" in x else "NONSPEECH")
-
-    # Extract condition
+    # Extract condition from original label BEFORE mapping
     df["condition"] = df["label"].apply(
         lambda x: (
             "clean"
-            if "CLEAN" in x
-            else "music" if "MUSIC" in x else "noise" if "NOISE" in x else "clean"
+            if "CLEAN" in str(x)
+            else "music" if "MUSIC" in str(x) else "noise" if "NOISE" in str(x) else "none"
         )
+    )
+
+    # Map labels to binary SPEECH/NONSPEECH
+    df["label"] = df["label"].apply(
+        lambda x: "SPEECH" if "SPEECH" in str(x) and "NO_SPEECH" not in str(x) else "NONSPEECH"
     )
 
     # Convert frame timestamp to seconds (assuming 25 fps)
@@ -162,6 +209,9 @@ def load_ava_speech(
     df["uri"] = df["video_id"]
     df["split"] = split
     df["dataset"] = dataset_name
+
+    # Keep only required columns
+    df = df[["uri", "start_s", "end_s", "label", "split", "dataset", "condition"]]
 
     if PROTOTYPE_MODE:
         unique_uris = df["uri"].unique()[:PROTOTYPE_SAMPLES]

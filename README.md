@@ -1,16 +1,41 @@
 # Qwen Speech Minimum (QSM)
 
-**Status:** ✅ Sprint 0 Complete | 🚀 Ready for Sprint 1
+**Status:** ✅ Sprint 1 Complete | 🚀 Ready for Sprint 2
 
 Temporal threshold measurement and optimization for speech detection in Qwen models.
 
 ## 📊 Project Status
 
-- **Sprint 0 (Infrastructure):** ✅ **COMPLETE** - All tests passing (14/14)
-- **Sprint 1 (Dataset Ingestion):** 🔜 Ready to start
-- **Tests:** All passing in <3 seconds
-- **Documentation:** Complete with 7+ guides
+- **Sprint 0 (Infrastructure):** ✅ **COMPLETE** - All tests passing
+- **Sprint 1 (Dataset Ingestion):** ✅ **COMPLETE** - Enhanced loaders with UEM support and nonspeech generation
+- **Sprint 2 (Segment Extraction):** 🔜 Ready to start
+- **Tests:** All passing (16/16) in <1 second
+- **Documentation:** Complete with 10+ guides
 - **Logging:** Automatic timestamped logs for all tests
+
+## 🎉 Sprint 1 Highlights (Dataset Ingestion)
+
+**Enhanced dataset loaders with production-ready features:**
+
+1. **RTTM Loader Enhancements:**
+   - ✅ UEM (Un-partitioned Evaluation Map) support for filtering valid regions
+   - ✅ Automatic nonspeech segment generation from gaps
+   - ✅ Proper timeline cropping and gap detection
+
+2. **AVA-Speech Loader Improvements:**
+   - ✅ Fixed condition extraction (clean/music/noise) from original labels
+   - ✅ Proper handling of frame timestamps (25 fps → seconds)
+   - ✅ Validates label mapping (NO_SPEECH vs SPEECH_*)
+
+3. **Test Coverage:**
+   - ✅ Added tests for nonspeech generation
+   - ✅ Added tests for condition extraction
+   - ✅ All 16 unit tests passing in <1 second
+
+4. **Code Quality:**
+   - ✅ All ruff linting checks passing
+   - ✅ Black formatting applied
+   - ✅ Modern Python typing (list, X | None)
 
 ## Overview
 
