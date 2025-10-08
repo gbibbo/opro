@@ -9,14 +9,14 @@ Respects PROTOTYPE_MODE setting in config.yaml:
 
 import argparse
 import logging
-from pathlib import Path
+import shutil
 import subprocess
 import sys
-import yaml
-from typing import List
+from pathlib import Path
+
 import requests
+import yaml
 from tqdm import tqdm
-import shutil
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -24,8 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from qsm import CONFIG, PROTOTYPE_MODE, PROTOTYPE_SAMPLES
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -35,14 +34,12 @@ def download_file(url: str, output_path: Path):
     response = requests.get(url, stream=True)
     response.raise_for_status()
 
-    total_size = int(response.headers.get('content-length', 0))
+    total_size = int(response.headers.get("content-length", 0))
 
-    with open(output_path, 'wb') as f, tqdm(
-        total=total_size,
-        unit='B',
-        unit_scale=True,
-        desc=output_path.name
-    ) as pbar:
+    with (
+        open(output_path, "wb") as f,
+        tqdm(total=total_size, unit="B", unit_scale=True, desc=output_path.name) as pbar,
+    ):
         for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)
             pbar.update(len(chunk))
@@ -121,7 +118,9 @@ def download_dihard(data_root: Path, prototype: bool = False):
                 f.write(f"SPEAKER mock_file_{i} 1 6.0 4.0 <NA> <NA> speaker_2 <NA> <NA>\n")
 
         logger.info(f"Created mock RTTM at {mock_rttm_path}")
-        logger.info("NOTE: For real data, obtain LDC license from https://dihardchallenge.github.io/dihard3/")
+        logger.info(
+            "NOTE: For real data, obtain LDC license from https://dihardchallenge.github.io/dihard3/"
+        )
 
     else:
         logger.info("Full DIHARD download:")
@@ -164,7 +163,9 @@ def download_ava_speech(data_root: Path, prototype: bool = False):
                     f.write(f"{video_id},{frame},{label},{condition}\n")
 
         logger.info(f"Created mock AVA-Speech annotations at {train_csv}")
-        logger.info("NOTE: For real data, download from https://research.google.com/ava/download.html")
+        logger.info(
+            "NOTE: For real data, download from https://research.google.com/ava/download.html"
+        )
 
     else:
         logger.info("Full AVA-Speech download:")
@@ -233,7 +234,9 @@ def download_ava_activespeaker(data_root: Path, prototype: bool = False):
         train_csv = ava_as_dir / "train.csv"
 
         with open(train_csv, "w") as f:
-            f.write("video_id,frame_timestamp,entity_box_x1,entity_box_y1,entity_box_x2,entity_box_y2,label,entity_id\n")
+            f.write(
+                "video_id,frame_timestamp,entity_box_x1,entity_box_y1,entity_box_x2,entity_box_y2,label,entity_id\n"
+            )
 
             for i in range(PROTOTYPE_SAMPLES):
                 video_id = f"mock_video_{i}"
@@ -267,13 +270,13 @@ def create_dataset_configs(config_dir: Path, data_root: Path):
         "rttm_path": {
             "train": str(data_root / "voxconverse" / "train"),
             "dev": str(data_root / "voxconverse" / "dev"),
-            "test": str(data_root / "voxconverse" / "test")
+            "test": str(data_root / "voxconverse" / "test"),
         },
         "audio_path": {
             "train": str(data_root / "voxconverse" / "audio" / "train"),
             "dev": str(data_root / "voxconverse" / "audio" / "dev"),
-            "test": str(data_root / "voxconverse" / "audio" / "test")
-        }
+            "test": str(data_root / "voxconverse" / "audio" / "test"),
+        },
     }
 
     with open(config_dir / "voxconverse.yaml", "w") as f:
@@ -286,13 +289,13 @@ def create_dataset_configs(config_dir: Path, data_root: Path):
         "rttm_path": {
             "train": str(data_root / "dihard" / "train" / "rttm"),
             "dev": str(data_root / "dihard" / "dev" / "mock.rttm"),
-            "test": str(data_root / "dihard" / "test" / "rttm")
+            "test": str(data_root / "dihard" / "test" / "rttm"),
         },
         "audio_path": {
             "train": str(data_root / "dihard" / "train" / "audio"),
             "dev": str(data_root / "dihard" / "dev" / "audio"),
-            "test": str(data_root / "dihard" / "test" / "audio")
-        }
+            "test": str(data_root / "dihard" / "test" / "audio"),
+        },
     }
 
     with open(config_dir / "dihard.yaml", "w") as f:
@@ -304,13 +307,13 @@ def create_dataset_configs(config_dir: Path, data_root: Path):
         "annotations_path": {
             "train": str(data_root / "ava_speech" / "train.csv"),
             "dev": str(data_root / "ava_speech" / "val.csv"),
-            "test": str(data_root / "ava_speech" / "test.csv")
+            "test": str(data_root / "ava_speech" / "test.csv"),
         },
         "audio_path": {
             "train": str(data_root / "ava_speech" / "audio" / "train"),
             "dev": str(data_root / "ava_speech" / "audio" / "val"),
-            "test": str(data_root / "ava_speech" / "audio" / "test")
-        }
+            "test": str(data_root / "ava_speech" / "audio" / "test"),
+        },
     }
 
     with open(config_dir / "ava_speech.yaml", "w") as f:
@@ -322,13 +325,13 @@ def create_dataset_configs(config_dir: Path, data_root: Path):
         "alignment_path": {
             "train": str(data_root / "ami" / "alignments" / "train"),
             "dev": str(data_root / "ami" / "alignments" / "dev"),
-            "test": str(data_root / "ami" / "alignments" / "test")
+            "test": str(data_root / "ami" / "alignments" / "test"),
         },
         "audio_path": {
             "train": str(data_root / "ami" / "audio" / "train"),
             "dev": str(data_root / "ami" / "audio" / "dev"),
-            "test": str(data_root / "ami" / "audio" / "test")
-        }
+            "test": str(data_root / "ami" / "audio" / "test"),
+        },
     }
 
     with open(config_dir / "ami.yaml", "w") as f:
@@ -340,13 +343,13 @@ def create_dataset_configs(config_dir: Path, data_root: Path):
         "annotations_path": {
             "train": str(data_root / "ava_activespeaker" / "train.csv"),
             "dev": str(data_root / "ava_activespeaker" / "val.csv"),
-            "test": str(data_root / "ava_activespeaker" / "test.csv")
+            "test": str(data_root / "ava_activespeaker" / "test.csv"),
         },
         "audio_path": {
             "train": str(data_root / "ava_activespeaker" / "audio" / "train"),
             "dev": str(data_root / "ava_activespeaker" / "audio" / "val"),
-            "test": str(data_root / "ava_activespeaker" / "audio" / "test")
-        }
+            "test": str(data_root / "ava_activespeaker" / "audio" / "test"),
+        },
     }
 
     with open(config_dir / "ava_activespeaker.yaml", "w") as f:
@@ -362,12 +365,10 @@ def main():
         nargs="+",
         choices=["voxconverse", "dihard", "ava_speech", "ami", "ava_activespeaker", "all"],
         default=["all"],
-        help="Datasets to download"
+        help="Datasets to download",
     )
     parser.add_argument(
-        "--force-full",
-        action="store_true",
-        help="Force full download even if PROTOTYPE_MODE=true"
+        "--force-full", action="store_true", help="Force full download even if PROTOTYPE_MODE=true"
     )
 
     args = parser.parse_args()

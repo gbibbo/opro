@@ -2,13 +2,12 @@
 Tests for segment slicing.
 """
 
-import pytest
-from pathlib import Path
-import pandas as pd
-import numpy as np
-from pyannote.core import Segment
 import logging
 from datetime import datetime
+from pathlib import Path
+
+import pandas as pd
+from pyannote.core import Segment
 
 # Configure logging to file
 log_dir = Path(__file__).parent.parent / "logs"
@@ -17,24 +16,17 @@ log_file = log_dir / f"test_slicing_{datetime.now().strftime('%Y%m%d_%H%M%S')}.l
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_file),
-        logging.StreamHandler()
-    ]
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
-logger.info("="*80)
+logger.info("=" * 80)
 logger.info("Starting test_slicing.py")
 logger.info(f"Log file: {log_file}")
-logger.info("="*80)
+logger.info("=" * 80)
 
-from qsm.data.slicing import (
-    slice_segments_from_interval,
-    balance_segments,
-    SegmentMetadata
-)
+from qsm.data.slicing import SegmentMetadata, balance_segments, slice_segments_from_interval
 
 
 def test_slice_segments_from_interval():
@@ -44,11 +36,7 @@ def test_slice_segments_from_interval():
     interval = Segment(0.0, 10.0)
 
     # Slice 100ms segments
-    segments = slice_segments_from_interval(
-        interval=interval,
-        duration_ms=100,
-        mode="speech"
-    )
+    segments = slice_segments_from_interval(interval=interval, duration_ms=100, mode="speech")
 
     assert len(segments) == 100  # 10s / 0.1s = 100 segments
 
@@ -68,10 +56,7 @@ def test_slice_with_max_segments():
     interval = Segment(0.0, 10.0)
 
     segments = slice_segments_from_interval(
-        interval=interval,
-        duration_ms=100,
-        max_segments=10,
-        mode="speech"
+        interval=interval, duration_ms=100, max_segments=10, mode="speech"
     )
 
     assert len(segments) == 10
@@ -84,9 +69,7 @@ def test_slice_interval_too_short():
     interval = Segment(0.0, 0.05)  # 50ms
 
     segments = slice_segments_from_interval(
-        interval=interval,
-        duration_ms=100,  # Need 100ms
-        mode="speech"
+        interval=interval, duration_ms=100, mode="speech"  # Need 100ms
     )
 
     assert len(segments) == 0
@@ -101,29 +84,33 @@ def test_balance_segments():
 
     # 100 clean speech segments
     for i in range(100):
-        data.append({
-            "uri": f"file_{i}",
-            "start_s": 0.0,
-            "end_s": 0.1,
-            "duration_ms": 100,
-            "label": "SPEECH",
-            "condition": "clean",
-            "dataset": "test",
-            "split": "train"
-        })
+        data.append(
+            {
+                "uri": f"file_{i}",
+                "start_s": 0.0,
+                "end_s": 0.1,
+                "duration_ms": 100,
+                "label": "SPEECH",
+                "condition": "clean",
+                "dataset": "test",
+                "split": "train",
+            }
+        )
 
     # 20 noisy speech segments
     for i in range(20):
-        data.append({
-            "uri": f"file_noise_{i}",
-            "start_s": 0.0,
-            "end_s": 0.1,
-            "duration_ms": 100,
-            "label": "SPEECH",
-            "condition": "noise",
-            "dataset": "test",
-            "split": "train"
-        })
+        data.append(
+            {
+                "uri": f"file_noise_{i}",
+                "start_s": 0.0,
+                "end_s": 0.1,
+                "duration_ms": 100,
+                "label": "SPEECH",
+                "condition": "noise",
+                "dataset": "test",
+                "split": "train",
+            }
+        )
 
     df = pd.DataFrame(data)
 
@@ -149,7 +136,7 @@ def test_segment_metadata():
         label="SPEECH",
         dataset="test",
         split="train",
-        condition="clean"
+        condition="clean",
     )
 
     assert meta.uri == "test_file"
@@ -165,17 +152,15 @@ def test_slice_various_durations():
     interval = Segment(0.0, 1.0)  # 1 second
 
     test_cases = [
-        (20, 50),   # 1000ms / 20ms = 50
-        (40, 25),   # 1000ms / 40ms = 25
+        (20, 50),  # 1000ms / 20ms = 50
+        (40, 25),  # 1000ms / 40ms = 25
         (100, 10),  # 1000ms / 100ms = 10
-        (500, 2),   # 1000ms / 500ms = 2
+        (500, 2),  # 1000ms / 500ms = 2
     ]
 
     for duration_ms, expected_count in test_cases:
         segments = slice_segments_from_interval(
-            interval=interval,
-            duration_ms=duration_ms,
-            mode="speech"
+            interval=interval, duration_ms=duration_ms, mode="speech"
         )
 
         assert len(segments) == expected_count, f"Failed for {duration_ms}ms"
@@ -199,6 +184,7 @@ def test_speech_nonspeech_mode():
     assert len(speech_segs) == len(nonspeech_segs) == 10
     logger.info("[PASS] test_speech_nonspeech_mode")
 
-logger.info("="*80)
+
+logger.info("=" * 80)
 logger.info("Completed test_slicing.py")
-logger.info("="*80)
+logger.info("=" * 80)

@@ -5,17 +5,18 @@ Creates balanced datasets at various temporal resolutions:
 {20, 40, 60, 80, 100, 150, 200, 300, 500, 1000} ms
 """
 
-from pathlib import Path
-from typing import List, Optional, Literal
-import numpy as np
-import soundfile as sf
-import pandas as pd
-from dataclasses import dataclass
 import json
 import logging
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal
+
+import pandas as pd
+import soundfile as sf
 from tqdm import tqdm
 
 from qsm import CONFIG
+
 from .loaders import FrameTable, Segment
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SegmentMetadata:
     """Metadata for a sliced segment."""
+
     uri: str
     start_s: float
     end_s: float
@@ -31,17 +33,17 @@ class SegmentMetadata:
     label: str
     dataset: str
     split: str
-    condition: Optional[str] = None
-    snr_bin: Optional[str] = None
+    condition: str | None = None
+    snr_bin: str | None = None
     audio_path: str = ""
 
 
 def slice_segments_from_interval(
     interval: Segment,
     duration_ms: int,
-    max_segments: Optional[int] = None,
-    mode: Literal["speech", "nonspeech"] = "speech"
-) -> List[Segment]:
+    max_segments: int | None = None,
+    mode: Literal["speech", "nonspeech"] = "speech",
+) -> list[Segment]:
     """
     Slice fixed-duration segments from an interval.
 
@@ -79,9 +81,9 @@ def create_segments(
     frame_table: FrameTable,
     audio_root: Path,
     output_dir: Path,
-    durations_ms: List[int],
-    balance_by: Optional[List[str]] = None,
-    max_segments_per_config: int = 1000
+    durations_ms: list[int],
+    balance_by: list[str] | None = None,
+    max_segments_per_config: int = 1000,
 ) -> pd.DataFrame:
     """
     Create balanced segment dataset at multiple durations.
@@ -109,7 +111,7 @@ def create_segments(
             frame_table=frame_table.speech_segments,
             duration_ms=duration_ms,
             label="SPEECH",
-            max_segments=max_segments_per_config
+            max_segments=max_segments_per_config,
         )
 
         # Extract nonspeech segments
@@ -117,7 +119,7 @@ def create_segments(
             frame_table=frame_table.nonspeech_segments,
             duration_ms=duration_ms,
             label="NONSPEECH",
-            max_segments=max_segments_per_config
+            max_segments=max_segments_per_config,
         )
 
         # Balance
@@ -180,11 +182,8 @@ def create_segments(
 
 
 def _extract_segments_for_duration(
-    frame_table: pd.DataFrame,
-    duration_ms: int,
-    label: str,
-    max_segments: int
-) -> List[SegmentMetadata]:
+    frame_table: pd.DataFrame, duration_ms: int, label: str, max_segments: int
+) -> list[SegmentMetadata]:
     """Helper to extract segments for a specific duration."""
     segments = []
 
@@ -195,7 +194,7 @@ def _extract_segments_for_duration(
             interval=interval,
             duration_ms=duration_ms,
             max_segments=1,  # One per interval for now
-            mode=label.lower()
+            mode=label.lower(),
         )
 
         for seg in slices:
@@ -209,7 +208,7 @@ def _extract_segments_for_duration(
                     dataset=row.get("dataset", "unknown"),
                     split=row.get("split", "train"),
                     condition=row.get("condition"),
-                    snr_bin=row.get("snr_bin")
+                    snr_bin=row.get("snr_bin"),
                 )
             )
 
@@ -219,10 +218,7 @@ def _extract_segments_for_duration(
     return segments[:max_segments]
 
 
-def balance_segments(
-    segments_df: pd.DataFrame,
-    balance_by: List[str]
-) -> pd.DataFrame:
+def balance_segments(segments_df: pd.DataFrame, balance_by: list[str]) -> pd.DataFrame:
     """
     Balance segments across multiple dimensions.
 

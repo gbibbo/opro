@@ -9,8 +9,8 @@ Runs in <30 seconds with minimal data to validate:
 """
 
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -24,11 +24,8 @@ log_file = log_dir / f"smoke_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_file),
-        logging.StreamHandler()
-    ]
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -40,10 +37,14 @@ def test_imports():
     logger.info("Testing imports...")
 
     try:
-        import qsm
+        import qsm  # noqa: F401
         from qsm import CONFIG, PROTOTYPE_MODE, PROTOTYPE_SAMPLES
-        from qsm.data import FrameTable, load_dataset
-        from qsm.data.slicing import slice_segments_from_interval
+        from qsm.data import FrameTable, load_dataset  # noqa: F401
+
+        # Verify imports are available
+        assert CONFIG is not None
+        assert PROTOTYPE_MODE is not None
+        assert PROTOTYPE_SAMPLES is not None
 
         logger.info("[PASS] Core imports successful")
         logger.info(f"  PROTOTYPE_MODE: {PROTOTYPE_MODE}")
@@ -86,17 +87,20 @@ def test_data_structures():
 
     try:
         import pandas as pd
+
         from qsm.data import FrameTable
 
         # Create minimal FrameTable
-        data = pd.DataFrame({
-            "uri": ["test_file"],
-            "start_s": [0.0],
-            "end_s": [1.0],
-            "label": ["SPEECH"],
-            "split": ["train"],
-            "dataset": ["smoke_test"]
-        })
+        data = pd.DataFrame(
+            {
+                "uri": ["test_file"],
+                "start_s": [0.0],
+                "end_s": [1.0],
+                "label": ["SPEECH"],
+                "split": ["train"],
+                "dataset": ["smoke_test"],
+            }
+        )
 
         ft = FrameTable(data=data)
 
@@ -119,15 +123,12 @@ def test_slicing():
 
     try:
         from pyannote.core import Segment
+
         from qsm.data.slicing import slice_segments_from_interval
 
         interval = Segment(0.0, 1.0)
 
-        segments = slice_segments_from_interval(
-            interval=interval,
-            duration_ms=100,
-            mode="speech"
-        )
+        segments = slice_segments_from_interval(interval=interval, duration_ms=100, mode="speech")
 
         assert len(segments) == 10
         assert segments[0].duration == 0.1

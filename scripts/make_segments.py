@@ -14,11 +14,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from qsm import CONFIG
-from qsm.data import load_dataset, create_segments
+from qsm.data import create_segments, load_dataset
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -31,15 +30,11 @@ def main():
         type=str,
         required=True,
         choices=["voxconverse", "dihard", "ava_speech", "ami", "ava_activespeaker"],
-        help="Dataset to process"
+        help="Dataset to process",
     )
 
     parser.add_argument(
-        "--split",
-        type=str,
-        default="dev",
-        choices=["train", "dev", "test"],
-        help="Data split"
+        "--split", type=str, default="dev", choices=["train", "dev", "test"], help="Data split"
     )
 
     parser.add_argument(
@@ -47,21 +42,21 @@ def main():
         nargs="+",
         type=int,
         default=CONFIG["durations_ms"],
-        help="Target durations in milliseconds"
+        help="Target durations in milliseconds",
     )
 
     parser.add_argument(
         "--max-segments",
         type=int,
         default=1000,
-        help="Maximum segments per (duration, condition) combination"
+        help="Maximum segments per (duration, condition) combination",
     )
 
     parser.add_argument(
         "--output-dir",
         type=Path,
         default=None,
-        help="Output directory (default: data/segments/{dataset}_{split})"
+        help="Output directory (default: data/segments/{dataset}_{split})",
     )
 
     args = parser.parse_args()
@@ -80,7 +75,8 @@ def main():
     config_path = Path(__file__).parent.parent / "configs" / "datasets" / f"{args.dataset}.yaml"
 
     import yaml
-    with open(config_path, "r") as f:
+
+    with open(config_path) as f:
         dataset_config = yaml.safe_load(f)
 
     audio_root = Path(dataset_config["audio_path"][args.split])
@@ -94,7 +90,7 @@ def main():
         audio_root=audio_root,
         output_dir=args.output_dir,
         durations_ms=args.durations,
-        max_segments_per_config=args.max_segments
+        max_segments_per_config=args.max_segments,
     )
 
     # Summary

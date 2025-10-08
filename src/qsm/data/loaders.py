@@ -9,15 +9,17 @@ Supports:
 - AVA-ActiveSpeaker (frame-level speaking labels)
 """
 
+import logging
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, List, Literal, Optional
+from typing import Literal
+
 import pandas as pd
 from pyannote.core import Segment, Timeline
 from pyannote.database.util import load_rttm
-import logging
 
-from qsm import CONFIG, PROTOTYPE_MODE, PROTOTYPE_SAMPLES
+from qsm import PROTOTYPE_MODE, PROTOTYPE_SAMPLES
 
 logger = logging.getLogger(__name__)
 
@@ -81,9 +83,9 @@ class FrameTable:
 
 def load_rttm_dataset(
     rttm_path: Path,
-    uem_path: Optional[Path] = None,
+    uem_path: Path | None = None,
     dataset_name: str = "unknown",
-    split: str = "train"
+    split: str = "train",
 ) -> FrameTable:
     """
     Load RTTM format annotations (DIHARD, VoxConverse).
@@ -105,14 +107,16 @@ def load_rttm_dataset(
     rows = []
     for uri, annotation in annotations.items():
         for segment, track, label in annotation.itertracks(yield_label=True):
-            rows.append({
-                "uri": uri,
-                "start_s": segment.start,
-                "end_s": segment.end,
-                "label": "SPEECH",  # RTTM segments are speech by default
-                "split": split,
-                "dataset": dataset_name,
-            })
+            rows.append(
+                {
+                    "uri": uri,
+                    "start_s": segment.start,
+                    "end_s": segment.end,
+                    "label": "SPEECH",  # RTTM segments are speech by default
+                    "split": split,
+                    "dataset": dataset_name,
+                }
+            )
 
     df = pd.DataFrame(rows)
 
@@ -126,9 +130,7 @@ def load_rttm_dataset(
 
 
 def load_ava_speech(
-    annotations_path: Path,
-    dataset_name: str = "ava_speech",
-    split: str = "train"
+    annotations_path: Path, dataset_name: str = "ava_speech", split: str = "train"
 ) -> FrameTable:
     """
     Load AVA-Speech frame-level annotations.
@@ -141,17 +143,14 @@ def load_ava_speech(
     df = pd.read_csv(annotations_path)
 
     # Map labels to binary SPEECH/NONSPEECH
-    df["label"] = df["label"].apply(
-        lambda x: "SPEECH" if "SPEECH" in x else "NONSPEECH"
-    )
+    df["label"] = df["label"].apply(lambda x: "SPEECH" if "SPEECH" in x else "NONSPEECH")
 
     # Extract condition
     df["condition"] = df["label"].apply(
         lambda x: (
-            "clean" if "CLEAN" in x else
-            "music" if "MUSIC" in x else
-            "noise" if "NOISE" in x else
             "clean"
+            if "CLEAN" in x
+            else "music" if "MUSIC" in x else "noise" if "NOISE" in x else "clean"
         )
     )
 
@@ -173,9 +172,7 @@ def load_ava_speech(
 
 
 def load_ami_alignment(
-    alignment_path: Path,
-    dataset_name: str = "ami",
-    split: str = "train"
+    alignment_path: Path, dataset_name: str = "ami", split: str = "train"
 ) -> FrameTable:
     """
     Load AMI forced alignment (word-level).
@@ -196,9 +193,7 @@ def load_ami_alignment(
 
 
 def iter_intervals(
-    uri: str,
-    frame_table: FrameTable,
-    label: Literal["SPEECH", "NONSPEECH"] = "SPEECH"
+    uri: str, frame_table: FrameTable, label: Literal["SPEECH", "NONSPEECH"] = "SPEECH"
 ) -> Iterator[Segment]:
     """
     Iterate over intervals for a specific URI and label.
@@ -212,8 +207,7 @@ def iter_intervals(
         Segment objects
     """
     uri_data = frame_table.data[
-        (frame_table.data["uri"] == uri) &
-        (frame_table.data["label"] == label)
+        (frame_table.data["uri"] == uri) & (frame_table.data["label"] == label)
     ]
 
     for _, row in uri_data.iterrows():
@@ -221,9 +215,7 @@ def iter_intervals(
 
 
 def load_dataset(
-    dataset_name: str,
-    split: str = "train",
-    config_path: Optional[Path] = None
+    dataset_name: str, split: str = "train", config_path: Path | None = None
 ) -> FrameTable:
     """
     Load any dataset by name using configuration.
@@ -237,13 +229,19 @@ def load_dataset(
         FrameTable with annotations
     """
     if config_path is None:
-        config_path = Path(__file__).parent.parent.parent.parent / "configs" / "datasets" / f"{dataset_name}.yaml"
+        config_path = (
+            Path(__file__).parent.parent.parent.parent
+            / "configs"
+            / "datasets"
+            / f"{dataset_name}.yaml"
+        )
 
     if not config_path.exists():
         raise FileNotFoundError(f"Dataset config not found: {config_path}")
 
     import yaml
-    with open(config_path, "r") as f:
+
+    with open(config_path) as f:
         dataset_config = yaml.safe_load(f)
 
     # Route to appropriate loader

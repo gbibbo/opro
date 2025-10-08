@@ -10,28 +10,25 @@ This script runs:
 All output is saved to logs/ directory with timestamps.
 """
 
-import sys
-import subprocess
-from pathlib import Path
-from datetime import datetime
 import logging
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
 
 # Setup logging
 root_dir = Path(__file__).parent.parent
 log_dir = root_dir / "logs"
 log_dir.mkdir(exist_ok=True)
 
-timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 master_log_file = log_dir / f"test_run_{timestamp}.log"
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(master_log_file),
-        logging.StreamHandler()
-    ]
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.FileHandler(master_log_file), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -55,11 +52,7 @@ def run_command(cmd, description, log_file=None):
 
     try:
         result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            cwd=root_dir,
-            timeout=300  # 5 minute timeout
+            cmd, capture_output=True, text=True, cwd=root_dir, timeout=300  # 5 minute timeout
         )
 
         output = result.stdout + result.stderr
@@ -72,7 +65,7 @@ def run_command(cmd, description, log_file=None):
         # Save to dedicated log file if specified
         if log_file:
             log_path = log_dir / log_file
-            with open(log_path, 'w', encoding='utf-8') as f:
+            with open(log_path, "w", encoding="utf-8") as f:
                 f.write(f"# {description}\n")
                 f.write(f"# Command: {' '.join(cmd) if isinstance(cmd, list) else cmd}\n")
                 f.write(f"# Timestamp: {datetime.now().isoformat()}\n")
@@ -111,11 +104,7 @@ def main():
     logger.info("=" * 80)
 
     smoke_cmd = [sys.executable, "scripts/smoke_test.py"]
-    success, _ = run_command(
-        smoke_cmd,
-        "Smoke Test",
-        f"smoke_test_{timestamp}.log"
-    )
+    success, _ = run_command(smoke_cmd, "Smoke Test", f"smoke_test_{timestamp}.log")
     results.append(("Smoke Test", success))
 
     # 2. Unit tests with pytest
@@ -124,17 +113,15 @@ def main():
     logger.info("=" * 80)
 
     pytest_cmd = [
-        sys.executable, "-m", "pytest",
+        sys.executable,
+        "-m",
+        "pytest",
         "tests/",
         "-v",
         "--tb=short",
-        "--log-cli-level=INFO"
+        "--log-cli-level=INFO",
     ]
-    success, _ = run_command(
-        pytest_cmd,
-        "Unit Tests (pytest)",
-        f"pytest_{timestamp}.log"
-    )
+    success, _ = run_command(pytest_cmd, "Unit Tests (pytest)", f"pytest_{timestamp}.log")
     results.append(("Unit Tests", success))
 
     # 3. Code quality - ruff (if available)
@@ -144,11 +131,7 @@ def main():
 
     try:
         ruff_cmd = [sys.executable, "-m", "ruff", "check", "src/", "tests/", "scripts/"]
-        success, _ = run_command(
-            ruff_cmd,
-            "Linting (ruff)",
-            f"ruff_{timestamp}.log"
-        )
+        success, _ = run_command(ruff_cmd, "Linting (ruff)", f"ruff_{timestamp}.log")
         results.append(("Linting (ruff)", success))
     except Exception as e:
         logger.warning(f"Ruff not available: {e}")
@@ -157,11 +140,7 @@ def main():
     # 4. Code formatting - black (if available)
     try:
         black_cmd = [sys.executable, "-m", "black", "--check", "src/", "tests/", "scripts/"]
-        success, _ = run_command(
-            black_cmd,
-            "Formatting (black)",
-            f"black_{timestamp}.log"
-        )
+        success, _ = run_command(black_cmd, "Formatting (black)", f"black_{timestamp}.log")
         results.append(("Formatting (black)", success))
     except Exception as e:
         logger.warning(f"Black not available: {e}")
@@ -173,14 +152,11 @@ def main():
     logger.info("=" * 80)
 
     import_cmd = [
-        sys.executable, "-c",
-        "import qsm; from qsm import CONFIG, PROTOTYPE_MODE; from qsm.data import FrameTable; print('[PASS] All imports successful')"
+        sys.executable,
+        "-c",
+        "import qsm; from qsm import CONFIG, PROTOTYPE_MODE; from qsm.data import FrameTable; print('[PASS] All imports successful')",
     ]
-    success, _ = run_command(
-        import_cmd,
-        "Import Test",
-        f"import_test_{timestamp}.log"
-    )
+    success, _ = run_command(import_cmd, "Import Test", f"import_test_{timestamp}.log")
     results.append(("Import Test", success))
 
     # Summary
