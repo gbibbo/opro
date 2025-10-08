@@ -27,12 +27,18 @@ Temporal threshold measurement and optimization for speech detection in Qwen mod
    - ✅ Proper handling of frame timestamps (25 fps → seconds)
    - ✅ Validates label mapping (NO_SPEECH vs SPEECH_*)
 
-3. **Test Coverage:**
+3. **Unified Annotation Pipeline:**
+   - ✅ New `build_unified_annotations.py` script
+   - ✅ Converts all dataset formats → consistent FrameTable schema
+   - ✅ Parquet output with duration statistics
+   - ✅ Per-dataset breakdown and inspection tools
+
+4. **Test Coverage:**
    - ✅ Added tests for nonspeech generation
    - ✅ Added tests for condition extraction
    - ✅ All 16 unit tests passing in <1 second
 
-4. **Code Quality:**
+5. **Code Quality:**
    - ✅ All ruff linting checks passing
    - ✅ Black formatting applied
    - ✅ Modern Python typing (list, X | None)
