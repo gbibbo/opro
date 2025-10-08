@@ -7,9 +7,10 @@ Temporal threshold measurement and optimization for speech detection in Qwen mod
 ## 📊 Project Status
 
 - **Sprint 0 (Infrastructure):** ✅ **COMPLETE** - All tests passing
-- **Sprint 1 (Dataset Ingestion):** ✅ **COMPLETE** - Enhanced loaders with UEM support and nonspeech generation
+- **Sprint 1 (Dataset Ingestion):** ✅ **COMPLETE** - Real audio downloaded (AMI: 298MB, 38 min)
 - **Sprint 2 (Segment Extraction):** 🔜 Ready to start
 - **Tests:** All passing (16/16) in <1 second
+- **Audio:** ✅ **298 MB real audio available** (5 AMI meetings, ~38 minutes)
 - **Documentation:** Complete with 10+ guides
 - **Logging:** Automatic timestamped logs for all tests
 
