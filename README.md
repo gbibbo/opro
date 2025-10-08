@@ -1,6 +1,16 @@
 # Qwen Speech Minimum (QSM)
 
+**Status:** ✅ Sprint 0 Complete | 🚀 Ready for Sprint 1
+
 Temporal threshold measurement and optimization for speech detection in Qwen models.
+
+## 📊 Project Status
+
+- **Sprint 0 (Infrastructure):** ✅ **COMPLETE** - All tests passing (14/14)
+- **Sprint 1 (Dataset Ingestion):** 🔜 Ready to start
+- **Tests:** All passing in <3 seconds
+- **Documentation:** Complete with 7+ guides
+- **Logging:** Automatic timestamped logs for all tests
 
 ## Overview
 
@@ -408,16 +418,45 @@ For prototyping, the 5-example limit should prevent OOM. For full datasets, adju
 
 ## Sprint 0 Status: ✅ COMPLETE
 
-**Key achievements:**
+### Latest Test Results (2025-10-08)
+
+```
+✅ Smoke Test:     PASSED (5/5 validations)
+✅ Unit Tests:     PASSED (14/14 tests in 0.56s)
+✅ Import Test:    PASSED
+✅ Total Time:     < 3 seconds
+```
+
+**All tests verified and passing.** Logs available in `logs/` directory.
+
+### Key Achievements
+
 - ✅ Complete project infrastructure
 - ✅ Configuration system with PROTOTYPE_MODE
-- ✅ Data loaders and slicing
-- ✅ Comprehensive testing framework
-- ✅ **Automatic logging for all tests**
-- ✅ **Test runner script**
-- ✅ Complete documentation
+- ✅ Data loaders and slicing functional
+- ✅ Comprehensive testing framework (14 unit tests)
+- ✅ **Automatic logging for all tests** (timestamped logs in `logs/`)
+- ✅ **Test runner script** (`run_all_tests.py`)
+- ✅ **Windows-compatible** (no Unicode encoding errors)
+- ✅ Complete documentation (7+ guides)
+- ✅ Git repository properly configured (logs excluded)
+
+### How to Verify
+
+```bash
+# Run all tests
+python scripts/run_all_tests.py
+
+# Quick validation
+python scripts/smoke_test.py
+
+# Check logs
+ls logs/
+cat logs/test_run_*.log
+```
 
 **See [SPRINT0_SUMMARY.md](SPRINT0_SUMMARY.md) for full details.**
+**See [TEST_RESULTS.md](TEST_RESULTS.md) for detailed test results.**
 
 **Ready for:** Sprint 1 (Dataset Ingestion)
 
