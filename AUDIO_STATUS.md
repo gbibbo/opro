@@ -12,10 +12,11 @@ This document tracks the availability of real audio files for each dataset in th
 |---------|--------|-------|------|--------|-------|
 | **AMI** | ✅ Downloaded | 5 meetings | ~298 MB | WAV (Mix-Headset) | Ready for inference |
 | **VoxConverse** | ✅ Downloaded | 5 conversations | ~45 MB | WAV (preprocessed) | Ready for inference |
+| **AVA-Speech** | ✅ Downloaded | 5 videos | ~1.3 GB | MP4 (with audio) | Ready for extraction |
 | **AVA-ActiveSpeaker** | ⏳ Manual Required | 0 | 0 MB | MP4 → WAV | Requires Google license |
 | **DIHARD** | ❌ Removed | - | - | - | Expensive LDC license |
 
-**Total Prototype Audio:** ~343 MB (10 files)
+**Total Prototype Audio:** ~1.6 GB (15 files)
 
 ## Download Commands
 
@@ -32,6 +33,12 @@ Downloads 5 AMI meetings with Mix-Headset audio.
 python scripts/download_voxconverse_audio.py --splits dev
 ```
 Downloads and keeps only 5 VoxConverse dev samples.
+
+**AVA-Speech:**
+```bash
+python scripts/download_ava_speech.py --datasets ava-speech
+```
+Downloads 5 AVA-Speech videos with annotations.
 
 **AVA-ActiveSpeaker:**
 ```bash
@@ -52,6 +59,12 @@ Downloads ~160 meetings from AMI corpus mirror. Estimated size: ~15-20 GB.
 python scripts/download_voxconverse_audio.py --splits dev test --force-full
 ```
 Downloads complete VoxConverse dev + test sets. Estimated size: ~5 GB.
+
+**AVA-Speech (Full):**
+```bash
+python scripts/download_ava_speech.py --datasets ava-speech --force-full
+```
+Downloads complete AVA-Speech dataset (160 videos). Estimated size: ~40 GB.
 
 **AVA-ActiveSpeaker (Full):**
 ```bash
@@ -77,6 +90,19 @@ Creates full placeholder structure. Requires manual download of videos and extra
 - **License:** Research use
 - **Annotations:** RTTM v0.3 with speaker diarization
 
+### AVA-Speech
+- **Downloaded:** 5 videos from trainval split
+- **Format:** MP4 video with embedded audio
+- **Total Size:** ~1.3 GB
+- **Source:** https://research.google.com/ava/download.html (S3 mirror)
+- **License:** Research use
+- **Annotations:** CSV with frame-level speech labels (Speech/Noise/Music)
+- **Frame Rate:** 25 fps
+- **Conditions:** Clean, music, noise backgrounds
+- **Next Steps:**
+  1. Extract audio using ffmpeg: `ffmpeg -i video.mp4 -vn -ar 16000 -ac 1 audio.wav`
+  2. Align frame-level labels with extracted audio
+
 ### AVA-ActiveSpeaker
 - **Downloaded:** 0 (placeholder annotations only)
 - **Format:** MP4 video → extract WAV audio
@@ -96,15 +122,16 @@ Creates full placeholder structure. Requires manual download of videos and extra
 ## Storage Requirements
 
 ### Current (Prototype Mode)
-- **Audio:** ~343 MB
-- **Annotations:** <1 MB
-- **Total:** ~344 MB
+- **Audio:** ~1.6 GB
+- **Annotations:** ~2 MB
+- **Total:** ~1.6 GB
 
 ### Full Datasets (Not Downloaded)
 - **AMI:** ~15-20 GB
 - **VoxConverse:** ~5 GB
+- **AVA-Speech:** ~40 GB
 - **AVA-ActiveSpeaker:** ~10+ GB
-- **Total:** ~30-35 GB
+- **Total:** ~70-80 GB
 
 ## Verification
 
@@ -117,20 +144,24 @@ ls -lh data/raw/ami/audio/*.wav
 # Check VoxConverse audio
 ls -lh data/raw/voxconverse/audio/dev/*.wav
 
+# Check AVA-Speech videos
+ls -lh data/raw/ava-speech/videos/trainval/*.mp4
+
 # Count total files
-find data/raw -name "*.wav" | wc -l  # Should be 10
+find data/raw -name "*.wav" -o -name "*.mp4" | wc -l  # Should be 15
 
 # Check total size
-du -sh data/raw/*/audio  # Should be ~343 MB
+du -sh data/raw  # Should be ~1.6 GB
 ```
 
 ## Next Steps
 
 1. ✅ AMI prototype audio downloaded
 2. ✅ VoxConverse prototype audio downloaded
-3. ⏳ AVA-ActiveSpeaker manual download pending
-4. ⏳ Build unified annotation pipeline (Sprint 1)
-5. ⏳ Extract segments at target durations (Sprint 2)
+3. ✅ AVA-Speech prototype videos downloaded
+4. ⏳ AVA-ActiveSpeaker manual download pending
+5. ⏳ Build unified annotation pipeline (Sprint 1)
+6. ⏳ Extract segments at target durations (Sprint 2)
 
 ## Troubleshooting
 
