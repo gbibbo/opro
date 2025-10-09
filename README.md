@@ -1,6 +1,6 @@
 # Qwen Speech Minimum (QSM)
 
-**Status:** ✅ Sprint 3 Complete | 🚀 VAD Baseline Established
+**Status:** ✅ Sprint 4 Ready | 🚀 Qwen2-Audio Infrastructure Complete
 
 Temporal threshold measurement and optimization for speech detection in Qwen models.
 
@@ -10,7 +10,7 @@ Temporal threshold measurement and optimization for speech detection in Qwen mod
 - **Sprint 1 (Dataset Ingestion):** ✅ COMPLETE
 - **Sprint 2 (Segment Extraction):** ✅ COMPLETE
 - **Sprint 3 (VAD Baseline):** ✅ COMPLETE - Silero-VAD baseline established
-- **Sprint 4 (Model Inference):** 🔜 Ready to start
+- **Sprint 4 (Model Inference):** ✅ READY - Qwen2-Audio infrastructure complete, requires GPU
 - **Dataset:** ✅ 1,016 clean segments (640 SPEECH + 376 NONSPEECH)
 
 ## 🎉 Sprint 3 Complete - VAD Baseline Established
@@ -77,14 +77,32 @@ python scripts/run_vad_baseline.py --segments-dir data/segments/esc50/nonspeech
 python scripts/run_vad_baseline.py --segments-dir data/segments/voxconverse/dev --threshold 0.5
 ```
 
-### 4. Validate Segments
+### 4. Run Qwen2-Audio Inference (Requires GPU)
+
+```bash
+# Quick test (2 segments)
+python scripts/run_qwen_inference.py \
+    --segments-dir data/segments/ava_speech/train \
+    --limit 2 \
+    --device cuda \
+    --dtype float16
+
+# Full evaluation on all datasets
+python scripts/run_qwen_inference.py --segments-dir data/segments/ava_speech/train --device cuda --dtype float16
+python scripts/run_qwen_inference.py --segments-dir data/segments/voxconverse/dev --device cuda --dtype float16
+python scripts/run_qwen_inference.py --segments-dir data/segments/esc50/nonspeech --device cuda --dtype float16
+```
+
+**See [SPRINT_4_SETUP.md](SPRINT_4_SETUP.md) for detailed GPU requirements and troubleshooting.**
+
+### 5. Validate Segments
 
 ```bash
 # Interactive player (WSL-compatible)
 python scripts/play_segments_interactive.py --segments-dir data/segments/ava_speech/train --min-duration 500
 ```
 
-### 5. Verify Dataset
+### 6. Verify Dataset
 
 ```python
 import pandas as pd
@@ -111,11 +129,14 @@ qwen-speech-min/
 │   ├── make_segments_esc50.py        # Generate ESC-50 NONSPEECH (cleaned)
 │   ├── clean_esc50_dataset.py        # Remove ambiguous sounds
 │   ├── run_vad_baseline.py           # Evaluate Silero-VAD
+│   ├── run_qwen_inference.py         # Run Qwen2-Audio inference
 │   └── play_segments_interactive.py  # Validate segments (WSL-compatible)
 ├── src/qsm/
 │   ├── data/
 │   │   ├── loaders.py   # RTTM, AVA-Speech loaders
 │   │   └── slicing.py   # Segment extraction with safety buffers
+│   ├── models/
+│   │   └── qwen_audio.py  # Qwen2-Audio classifier wrapper
 │   └── vad/
 │       ├── base.py      # VAD abstract interface
 │       └── silero.py    # Silero-VAD implementation
@@ -123,7 +144,10 @@ qwen-speech-min/
 │   ├── ava_speech/train/      # 320 AVA SPEECH segments
 │   ├── voxconverse/dev/       # 320 VoxConverse SPEECH segments
 │   └── esc50/nonspeech/       # 376 ESC-50 NONSPEECH segments (cleaned)
-└── results/vad_baseline/      # Silero-VAD evaluation results
+├── results/
+│   ├── vad_baseline/          # Silero-VAD evaluation results
+│   └── qwen_inference/        # Qwen2-Audio evaluation results (when run)
+└── SPRINT_4_SETUP.md          # Detailed GPU setup guide
 ```
 
 ## Datasets
@@ -198,13 +222,19 @@ See [pyproject.toml](pyproject.toml) for complete list.
 - [INSTALL.md](INSTALL.md) - Installation guide
 - [QUICK_START.md](QUICK_START.md) - Segment generation guide
 - [SPRINT_0_COMPLETE.md](SPRINT_0_COMPLETE.md) - Sprint 0 summary
+- [SPRINT_4_SETUP.md](SPRINT_4_SETUP.md) - Qwen2-Audio inference setup (GPU requirements)
 
 ## Results
 
-VAD baseline results available in `results/vad_baseline/`:
+### VAD Baseline (Silero-VAD)
+Results available in `results/vad_baseline/`:
 - AVA-Speech: [results/vad_baseline/ava_speech/](results/vad_baseline/ava_speech/)
 - VoxConverse: [results/vad_baseline/voxconverse/](results/vad_baseline/voxconverse/)
 - ESC-50 Clean: [results/vad_baseline/esc50/](results/vad_baseline/esc50/)
+
+### Qwen2-Audio Inference (Requires GPU)
+Results will be saved to `results/qwen_inference/` when inference is run.
+See [SPRINT_4_SETUP.md](SPRINT_4_SETUP.md) for GPU requirements and instructions.
 
 ## References
 
@@ -220,4 +250,4 @@ Apache-2.0
 
 ---
 
-**Sprint 3 Complete:** Silero-VAD baseline established with 95-100% accuracy on clean dataset. Ready for Sprint 4 (Qwen2-Audio Model Inference).
+**Sprint 4 Infrastructure Complete:** Qwen2-Audio inference pipeline ready. Requires GPU with ≥16GB VRAM for execution. See [SPRINT_4_SETUP.md](SPRINT_4_SETUP.md) for detailed instructions.
