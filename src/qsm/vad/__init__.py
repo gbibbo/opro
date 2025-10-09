@@ -7,12 +7,12 @@ Implements low-latency VAD models for comparison with Qwen:
 """
 
 from .base import VADModel, VADPrediction
-from .webrtc import WebRTCVAD
 from .silero import SileroVAD
+from .webrtc import WebRTCVAD
 
 __all__ = [
     "VADModel",
     "VADPrediction",
-    "WebRTCVAD",
     "SileroVAD",
+    "WebRTCVAD",
 ]

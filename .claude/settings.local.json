@@ -10,7 +10,8 @@
       "Bash(echo \"git config --global user.email \"\"your-email@example.com\"\"\")",
       "Bash(echo \"git config --global user.name \"\"Your Name\"\"\")",
       "Bash(git push:*)",
-      "Bash(timeout 120 git push origin main)"
+      "Bash(timeout 120 git push origin main)",
+      "Bash(ruff check:*)"
     ],
     "deny": [],
     "ask": []

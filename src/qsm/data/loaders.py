@@ -210,9 +210,12 @@ def load_ava_speech(
     """
     logger.info(f"Loading AVA-Speech from {annotations_path}")
 
-    # Read CSV with correct column names
+    # Read CSV with correct column names and explicit dtypes
     df = pd.read_csv(
-        annotations_path, header=None, names=["video_id", "start_s", "end_s", "original_label"]
+        annotations_path,
+        header=None,
+        names=["video_id", "start_s", "end_s", "original_label"],
+        dtype={"video_id": str, "start_s": float, "end_s": float, "original_label": str},
     )
 
     # Extract condition from original label BEFORE mapping
