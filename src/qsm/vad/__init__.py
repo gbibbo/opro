@@ -1,18 +1,15 @@
 """
-Voice Activity Detection (VAD) baselines.
+Voice Activity Detection (VAD) baseline.
 
-Implements low-latency VAD models for comparison with Qwen:
-- WebRTC-VAD (10/20/30ms frames)
-- Silero-VAD (32-96ms frames)
+Implements Silero-VAD neural network model for binary speech/nonspeech classification.
+Optimized for segments ≥100ms with 95-100% accuracy on clean audio.
 """
 
 from .base import VADModel, VADPrediction
 from .silero import SileroVAD
-from .webrtc import WebRTCVAD
 
 __all__ = [
     "VADModel",
     "VADPrediction",
     "SileroVAD",
-    "WebRTCVAD",
 ]
