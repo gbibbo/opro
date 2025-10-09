@@ -84,6 +84,7 @@ class FrameTable:
 def load_rttm_dataset(
     rttm_path: Path,
     uem_path: Path | None = None,
+    audio_dir: Path | None = None,
     dataset_name: str = "unknown",
     split: str = "train",
     include_nonspeech: bool = False,
@@ -94,6 +95,7 @@ def load_rttm_dataset(
     Args:
         rttm_path: Path to RTTM file
         uem_path: Optional UEM file to filter valid regions
+        audio_dir: Optional directory containing audio files to get durations
         dataset_name: Name of the dataset
         split: Data split (train/dev/test)
         include_nonspeech: If True, generate nonspeech segments from gaps
@@ -113,6 +115,20 @@ def load_rttm_dataset(
 
         logger.info(f"Loading UEM from {uem_path}")
         uem_timeline = load_uem(uem_path)
+
+    # Get audio durations if audio_dir provided
+    audio_durations = {}
+    if audio_dir is not None and include_nonspeech:
+        import soundfile as sf
+
+        for audio_file in audio_dir.glob("*.wav"):
+            try:
+                info = sf.info(audio_file)
+                audio_durations[audio_file.stem] = info.duration
+            except Exception as e:
+                logger.warning(f"Failed to get duration for {audio_file.name}: {e}")
+
+        logger.info(f"Loaded {len(audio_durations)} audio durations for nonspeech generation")
 
     rows = []
     for uri, annotation in annotations.items():
@@ -142,11 +158,19 @@ def load_rttm_dataset(
             # Determine full extent
             if uem_timeline is not None and uri in uem_timeline:
                 full_extent = uem_timeline[uri].extent()
+                logger.debug(f"{uri}: Using UEM extent: {full_extent}")
+            elif uri in audio_durations:
+                # Use audio duration to get full extent
+                from pyannote.core import Segment as PyannoteSegment
+                full_extent = PyannoteSegment(0, audio_durations[uri])
+                logger.debug(f"{uri}: Using audio duration extent: {full_extent}")
             else:
                 full_extent = speech_timeline.extent()
+                logger.debug(f"{uri}: Using speech timeline extent: {full_extent}")
 
-            # Get gaps (nonspeech)
-            nonspeech_timeline = Timeline([full_extent]).gaps(speech_timeline)
+            # Get gaps (nonspeech) - use extrude to remove speech from full timeline
+            nonspeech_timeline = Timeline([full_extent]).extrude(speech_timeline)
+            logger.debug(f"{uri}: Generated {len(nonspeech_timeline)} nonspeech gaps")
 
             for segment in nonspeech_timeline:
                 rows.append(
@@ -177,7 +201,7 @@ def load_ava_speech(
     """
     Load AVA-Speech frame-level annotations.
 
-    Format: CSV with columns [video_id, frame_timestamp, label]
+    Format: CSV with columns [video_id, start_time, end_time, label]
     Labels: SPEECH_CLEAN, SPEECH_WITH_MUSIC, SPEECH_WITH_NOISE, NO_SPEECH
 
     Returns:
@@ -185,10 +209,11 @@ def load_ava_speech(
     """
     logger.info(f"Loading AVA-Speech from {annotations_path}")
 
-    df = pd.read_csv(annotations_path)
+    # Read CSV with correct column names
+    df = pd.read_csv(annotations_path, header=None, names=["video_id", "start_s", "end_s", "original_label"])
 
     # Extract condition from original label BEFORE mapping
-    df["condition"] = df["label"].apply(
+    df["condition"] = df["original_label"].apply(
         lambda x: (
             "clean"
             if "CLEAN" in str(x)
@@ -197,14 +222,9 @@ def load_ava_speech(
     )
 
     # Map labels to binary SPEECH/NONSPEECH
-    df["label"] = df["label"].apply(
+    df["label"] = df["original_label"].apply(
         lambda x: "SPEECH" if "SPEECH" in str(x) and "NO_SPEECH" not in str(x) else "NONSPEECH"
     )
-
-    # Convert frame timestamp to seconds (assuming 25 fps)
-    fps = 25
-    df["start_s"] = df["frame_timestamp"] / fps
-    df["end_s"] = (df["frame_timestamp"] + 1) / fps
 
     df["uri"] = df["video_id"]
     df["split"] = split
@@ -213,10 +233,8 @@ def load_ava_speech(
     # Keep only required columns
     df = df[["uri", "start_s", "end_s", "label", "split", "dataset", "condition"]]
 
-    if PROTOTYPE_MODE:
-        unique_uris = df["uri"].unique()[:PROTOTYPE_SAMPLES]
-        df = df[df["uri"].isin(unique_uris)]
-        logger.info(f"PROTOTYPE_MODE: Limited to {len(unique_uris)} videos")
+    # Note: PROTOTYPE_MODE filtering should be done by caller if needed
+    # to allow filtering by available audio files
 
     return FrameTable(data=df)
 

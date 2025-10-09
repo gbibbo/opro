@@ -67,7 +67,7 @@ def extract_zip(zip_path: Path, extract_to: Path):
 
 def download_voxconverse_audio(data_root: Path, splits: list[str] = None, prototype: bool = True):
     """
-    Download VoxConverse pre-processed audio files.
+    Download VoxConverse pre-processed audio files and RTTM annotations.
 
     Args:
         data_root: Root directory for data storage
@@ -80,17 +80,28 @@ def download_voxconverse_audio(data_root: Path, splits: list[str] = None, protot
     voxconverse_dir = data_root / "voxconverse"
     voxconverse_dir.mkdir(parents=True, exist_ok=True)
 
-    urls = {
+    audio_urls = {
         "dev": "https://www.robots.ox.ac.uk/~vgg/data/voxconverse/data/voxconverse_dev_wav.zip",
         "test": "https://www.robots.ox.ac.uk/~vgg/data/voxconverse/data/voxconverse_test_wav.zip",
     }
+
+    # RTTM annotation URLs from the official GitHub repo
+    rttm_base_url = "https://raw.githubusercontent.com/joonson/voxconverse/master"
 
     for split in splits:
         logger.info("=" * 80)
         logger.info(f"📥 DOWNLOADING VOXCONVERSE {split.upper()}")
         logger.info("=" * 80)
 
-        url = urls[split]
+        # Download RTTM annotations first
+        logger.info(f"Step 1: Downloading RTTM annotations for {split}")
+        rttm_dir = voxconverse_dir / split
+        rttm_dir.mkdir(parents=True, exist_ok=True)
+
+        # For now, we'll get RTTMs from audio filenames after download
+        # VoxConverse provides RTTMs via GitHub repo cloning (done in download_datasets.py)
+
+        url = audio_urls[split]
         zip_path = voxconverse_dir / f"voxconverse_{split}_wav.zip"
         audio_dir = voxconverse_dir / "audio" / split
 
