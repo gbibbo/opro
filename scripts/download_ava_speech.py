@@ -275,11 +275,7 @@ def extract_audio_from_videos(videos_dir: Path, audio_dir: Path):
 
     # Check if ffmpeg is available
     try:
-        result = subprocess.run(
-            ["ffmpeg", "-version"],
-            capture_output=True,
-            timeout=5
-        )
+        result = subprocess.run(["ffmpeg", "-version"], capture_output=True, timeout=5)
         if result.returncode != 0:
             logger.error("ffmpeg not found. Please install ffmpeg to extract audio.")
             logger.info("Install: https://ffmpeg.org/download.html")
@@ -290,7 +286,11 @@ def extract_audio_from_videos(videos_dir: Path, audio_dir: Path):
         return
 
     # Get all video files
-    video_files = list(videos_dir.glob("*.mp4")) + list(videos_dir.glob("*.mkv")) + list(videos_dir.glob("*.webm"))
+    video_files = (
+        list(videos_dir.glob("*.mp4"))
+        + list(videos_dir.glob("*.mkv"))
+        + list(videos_dir.glob("*.webm"))
+    )
 
     if not video_files:
         logger.warning("No video files found to extract audio from")
@@ -311,17 +311,21 @@ def extract_audio_from_videos(videos_dir: Path, audio_dir: Path):
             subprocess.run(
                 [
                     "ffmpeg",
-                    "-i", str(video_file),
+                    "-i",
+                    str(video_file),
                     "-vn",  # No video
-                    "-acodec", "pcm_s16le",  # 16-bit PCM
-                    "-ar", "16000",  # 16kHz sample rate
-                    "-ac", "1",  # Mono
+                    "-acodec",
+                    "pcm_s16le",  # 16-bit PCM
+                    "-ar",
+                    "16000",  # 16kHz sample rate
+                    "-ac",
+                    "1",  # Mono
                     "-y",  # Overwrite
-                    str(audio_file)
+                    str(audio_file),
                 ],
                 check=True,
                 capture_output=True,
-                timeout=300
+                timeout=300,
             )
             logger.info(f"✅ Extracted audio: {audio_file.name}")
         except subprocess.CalledProcessError as e:
@@ -396,7 +400,9 @@ def download_ava_speech(
 
     # Summary
     video_count = len(list(videos_dir.glob("*.mp4"))) + len(list(videos_dir.glob("*.mkv")))
-    total_size = sum(f.stat().st_size for f in videos_dir.glob("*.mp4")) + sum(f.stat().st_size for f in videos_dir.glob("*.mkv"))
+    total_size = sum(f.stat().st_size for f in videos_dir.glob("*.mp4")) + sum(
+        f.stat().st_size for f in videos_dir.glob("*.mkv")
+    )
     audio_count = len(list(audio_dir.glob("*.wav")))
 
     logger.info(f"Videos downloaded: {video_count}")

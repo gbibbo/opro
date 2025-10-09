@@ -19,6 +19,7 @@ import pandas as pd
 try:
     import sounddevice as sd
     import soundfile as sf
+
     AUDIO_PLAYBACK_AVAILABLE = True
 except ImportError:
     AUDIO_PLAYBACK_AVAILABLE = False
@@ -193,7 +194,9 @@ def main():
     print("\nTo play random samples, use:")
     print(f"  python scripts/verify_segments.py --segments-dir {args.segments_dir} --play-random 5")
     print("\nTo filter by label:")
-    print(f"  python scripts/verify_segments.py --segments-dir {args.segments_dir} --label SPEECH --list")
+    print(
+        f"  python scripts/verify_segments.py --segments-dir {args.segments_dir} --label SPEECH --list"
+    )
 
 
 if __name__ == "__main__":

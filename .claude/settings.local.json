@@ -1,8 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(conda run -n opro pip install:*)",
-      "Bash(python:*)"
+      "Read(//c/mnt/c/VS projects/OPRO Qwen/**)",
+      "Bash(find:*)",
+      "Bash(awk:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)",
+      "Bash(echo \"git config --global user.email \"\"your-email@example.com\"\"\")",
+      "Bash(echo \"git config --global user.name \"\"Your Name\"\"\")",
+      "Bash(git push:*)",
+      "Bash(timeout 120 git push origin main)"
     ],
     "deny": [],
     "ask": []

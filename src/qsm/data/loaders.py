@@ -162,6 +162,7 @@ def load_rttm_dataset(
             elif uri in audio_durations:
                 # Use audio duration to get full extent
                 from pyannote.core import Segment as PyannoteSegment
+
                 full_extent = PyannoteSegment(0, audio_durations[uri])
                 logger.debug(f"{uri}: Using audio duration extent: {full_extent}")
             else:
@@ -210,7 +211,9 @@ def load_ava_speech(
     logger.info(f"Loading AVA-Speech from {annotations_path}")
 
     # Read CSV with correct column names
-    df = pd.read_csv(annotations_path, header=None, names=["video_id", "start_s", "end_s", "original_label"])
+    df = pd.read_csv(
+        annotations_path, header=None, names=["video_id", "start_s", "end_s", "original_label"]
+    )
 
     # Extract condition from original label BEFORE mapping
     df["condition"] = df["original_label"].apply(

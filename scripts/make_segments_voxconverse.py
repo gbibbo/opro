@@ -62,9 +62,7 @@ def load_voxconverse_multi_rttm(
     logger.info(f"Found {len(rttm_files)} matching RTTM files")
 
     if not rttm_files:
-        raise FileNotFoundError(
-            f"No RTTM files found matching audio files in {rttm_dir}"
-        )
+        raise FileNotFoundError(f"No RTTM files found matching audio files in {rttm_dir}")
 
     # Load each RTTM file and combine
     all_frames = []
@@ -171,7 +169,9 @@ def main():
         split=args.split,
     )
 
-    logger.info(f"Loaded {len(frame_table.data)} intervals from {frame_table.data['uri'].nunique()} recordings")
+    logger.info(
+        f"Loaded {len(frame_table.data)} intervals from {frame_table.data['uri'].nunique()} recordings"
+    )
     logger.info("")
 
     # Create segments with safety buffers (hardcoded in slicing.py)
@@ -198,7 +198,9 @@ def main():
         subset = metadata_df[metadata_df["duration_ms"] == duration_ms]
         speech = (subset["label"] == "SPEECH").sum()
         nonspeech = (subset["label"] == "NONSPEECH").sum()
-        logger.info(f"{duration_ms:4d}ms: {len(subset):3d} total ({speech} SPEECH + {nonspeech} NONSPEECH)")
+        logger.info(
+            f"{duration_ms:4d}ms: {len(subset):3d} total ({speech} SPEECH + {nonspeech} NONSPEECH)"
+        )
 
     logger.info("")
     logger.info("Verify with:")

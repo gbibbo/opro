@@ -31,9 +31,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Create sliced audio segments with 1s safety buffers"
     )
-    parser.add_argument(
-        "--split", type=str, default="train", help="Dataset split to use"
-    )
+    parser.add_argument("--split", type=str, default="train", help="Dataset split to use")
     parser.add_argument(
         "--durations",
         type=int,
@@ -73,9 +71,7 @@ def main():
     data_root = Path(CONFIG["data"]["root"])
 
     logger.info(f"Loading AVA-Speech annotations...")
-    annotations_path = (
-        data_root / "raw" / "ava-speech" / "annotations" / "ava_speech_labels_v1.csv"
-    )
+    annotations_path = data_root / "raw" / "ava-speech" / "annotations" / "ava_speech_labels_v1.csv"
     frame_table = load_ava_speech(annotations_path, split=args.split)
     audio_root = data_root / "raw" / "ava-speech" / "audio"
 
@@ -116,7 +112,9 @@ def main():
 
     if len(metadata_df) == 0:
         logger.error("❌ No segments were created!")
-        logger.error("   Check that audio files exist and intervals are long enough (>2s after buffers)")
+        logger.error(
+            "   Check that audio files exist and intervals are long enough (>2s after buffers)"
+        )
         sys.exit(1)
 
     logger.info("\nSegments by duration:")

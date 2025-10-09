@@ -92,6 +92,7 @@ def show_segment_info(row: pd.Series, segments_dir: Path):
     """Display segment information."""
     # Normalize path separators for cross-platform compatibility
     import os
+
     path_str = str(row["audio_path"]).replace("\\", "/")
     audio_path = Path(path_str)
     filename = os.path.basename(path_str)
@@ -179,6 +180,7 @@ def interactive_player(
 
         # Get just the filename (handle both Windows and Unix paths)
         import os
+
         filename = os.path.basename(path_str)
 
         # Show progress
@@ -241,9 +243,7 @@ def interactive_player(
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Interactive audio segment player for validation"
-    )
+    parser = argparse.ArgumentParser(description="Interactive audio segment player for validation")
     parser.add_argument(
         "--segments-dir",
         type=str,

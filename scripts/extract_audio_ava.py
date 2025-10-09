@@ -29,6 +29,7 @@ def extract_audio_with_ffmpeg(videos_dir: Path, audio_dir: Path):
     except ImportError:
         logger.error("imageio_ffmpeg not found. Installing...")
         import subprocess
+
         subprocess.run([sys.executable, "-m", "pip", "install", "imageio-ffmpeg"], check=True)
         import imageio_ffmpeg as ffmpeg
 
@@ -67,21 +68,20 @@ def extract_audio_with_ffmpeg(videos_dir: Path, audio_dir: Path):
             # Use ffmpeg to extract audio
             cmd = [
                 ffmpeg_exe,
-                "-i", str(video_file),
+                "-i",
+                str(video_file),
                 "-vn",  # No video
-                "-acodec", "pcm_s16le",  # 16-bit PCM
-                "-ar", "16000",  # 16kHz sample rate
-                "-ac", "1",  # Mono
+                "-acodec",
+                "pcm_s16le",  # 16-bit PCM
+                "-ar",
+                "16000",  # 16kHz sample rate
+                "-ac",
+                "1",  # Mono
                 "-y",  # Overwrite
-                str(audio_file)
+                str(audio_file),
             ]
 
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                timeout=300,
-                text=True
-            )
+            result = subprocess.run(cmd, capture_output=True, timeout=300, text=True)
 
             if result.returncode != 0:
                 logger.error(f"❌ ffmpeg error: {result.stderr}")

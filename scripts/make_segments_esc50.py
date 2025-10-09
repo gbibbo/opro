@@ -47,7 +47,9 @@ def extract_segments_from_esc50(
 
     # Load metadata
     df = pd.read_csv(esc50_meta_csv)
-    logger.info(f"Loaded ESC-50 metadata: {len(df)} files across {df['category'].nunique()} categories")
+    logger.info(
+        f"Loaded ESC-50 metadata: {len(df)} files across {df['category'].nunique()} categories"
+    )
 
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -61,13 +63,13 @@ def extract_segments_from_esc50(
         segments_created = 0
 
         # Shuffle files to get random distribution across categories
-        shuffled_files = df.sample(frac=1, random_state=seed).to_dict('records')
+        shuffled_files = df.sample(frac=1, random_state=seed).to_dict("records")
 
         for file_info in shuffled_files:
             if segments_created >= max_segments_per_duration:
                 break
 
-            audio_path = esc50_audio_dir / file_info['filename']
+            audio_path = esc50_audio_dir / file_info["filename"]
 
             if not audio_path.exists():
                 logger.warning(f"Audio file not found: {audio_path}")
@@ -97,10 +99,7 @@ def extract_segments_from_esc50(
                 num_frames = int(duration_s * info.samplerate)
 
                 audio_data, sr = sf.read(
-                    audio_path,
-                    start=start_frame,
-                    frames=num_frames,
-                    dtype='float32'
+                    audio_path, start=start_frame, frames=num_frames, dtype="float32"
                 )
 
                 # Create output filename
@@ -112,14 +111,16 @@ def extract_segments_from_esc50(
 
                 # Create metadata
                 metadata = SegmentMetadata(
-                    uri=file_info['filename'],
+                    uri=file_info["filename"],
                     start_s=start_s,
                     end_s=end_s,
                     duration_ms=duration_ms,
                     label="NONSPEECH",
                     dataset="esc50",
                     split="nonspeech",
-                    condition=file_info['category'],  # ESC-50 category (e.g., "rain", "dog", "train")
+                    condition=file_info[
+                        "category"
+                    ],  # ESC-50 category (e.g., "rain", "dog", "train")
                     audio_path=str(output_path),
                 )
 
@@ -136,9 +137,7 @@ def extract_segments_from_esc50(
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Generate NONSPEECH segments from ESC-50 dataset"
-    )
+    parser = argparse.ArgumentParser(description="Generate NONSPEECH segments from ESC-50 dataset")
     parser.add_argument(
         "--esc50-dir",
         type=Path,
@@ -214,7 +213,7 @@ def main():
         logger.info(f"  {duration_ms}ms: {count} segments")
 
     logger.info("\nTop 10 categories used:")
-    category_counts = df['condition'].value_counts().head(10)
+    category_counts = df["condition"].value_counts().head(10)
     for category, count in category_counts.items():
         logger.info(f"  {category}: {count} segments")
 
