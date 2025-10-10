@@ -56,9 +56,12 @@ def mock_ava_csv(temp_dir):
     """Create a mock AVA-Speech CSV file."""
     csv_path = temp_dir / "ava_speech.csv"
 
+    # AVA-Speech format: [video_id, start_s, end_s, label]
+    # Note: start_s and end_s must be floats
     data = {
         "video_id": ["video_1"] * 10 + ["video_2"] * 10,
-        "frame_timestamp": list(range(10)) * 2,
+        "start_s": [0.0, 0.04, 0.08, 0.12, 0.16, 0.20, 0.24, 0.28, 0.32, 0.36] * 2,
+        "end_s": [0.04, 0.08, 0.12, 0.16, 0.20, 0.24, 0.28, 0.32, 0.36, 0.40] * 2,
         "label": ["SPEECH_CLEAN"] * 5
         + ["NO_SPEECH"] * 5
         + ["SPEECH_WITH_MUSIC"] * 5
@@ -66,7 +69,8 @@ def mock_ava_csv(temp_dir):
     }
 
     df = pd.DataFrame(data)
-    df.to_csv(csv_path, index=False)
+    # Write without headers to match expected format
+    df.to_csv(csv_path, index=False, header=False)
 
     return csv_path
 
@@ -139,8 +143,10 @@ def test_load_ava_speech(mock_ava_csv):
     # Check condition extraction
     assert "condition" in ft.data.columns
 
-    # Check time conversion (25 fps)
-    assert ft.data["end_s"].max() <= 1.0  # 10 frames / 25 fps = 0.4s
+    # Check timestamps are reasonable
+    assert ft.data["start_s"].min() >= 0.0
+    assert ft.data["end_s"].max() <= 1.0  # Max is 0.40s
+    assert all(ft.data["start_s"] < ft.data["end_s"])  # start < end
     logger.info("[PASS] test_load_ava_speech")
 
 

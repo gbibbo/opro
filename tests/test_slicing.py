@@ -1,5 +1,5 @@
 """
-Tests for segment slicing.
+Tests for segment slicing with safety buffers.
 """
 
 import logging
@@ -30,23 +30,24 @@ from qsm.data.slicing import SegmentMetadata, balance_segments, slice_segments_f
 
 
 def test_slice_segments_from_interval():
-    """Test slicing segments from an interval."""
+    """Test slicing segments from an interval with safety buffers."""
     logger.info("Running test_slice_segments_from_interval")
     # Create a 10-second interval
     interval = Segment(0.0, 10.0)
 
-    # Slice 100ms segments
+    # Slice 100ms segments with 1s safety buffer (default)
+    # Valid zone: [1.0, 9.0] = 8 seconds → 80 segments of 100ms
     segments = slice_segments_from_interval(interval=interval, duration_ms=100, mode="speech")
 
-    assert len(segments) == 100  # 10s / 0.1s = 100 segments
+    assert len(segments) == 80  # 8s / 0.1s = 80 segments (with 1s buffer on each side)
 
-    # Check first segment
-    assert segments[0].start == 0.0
-    assert segments[0].end == 0.1
+    # Check first segment (starts at 1.0s due to safety buffer)
+    assert segments[0].start == 1.0
+    assert segments[0].end == 1.1
 
-    # Check last segment
-    assert segments[-1].start == 9.9
-    assert segments[-1].end == 10.0
+    # Check last segment (ends at 9.0s due to safety buffer)
+    assert segments[-1].start == 8.9
+    assert segments[-1].end == 9.0
     logger.info("[PASS] test_slice_segments_from_interval")
 
 
@@ -64,15 +65,16 @@ def test_slice_with_max_segments():
 
 
 def test_slice_interval_too_short():
-    """Test that too-short intervals return empty list."""
+    """Test that too-short intervals return empty list after safety buffers."""
     logger.info("Running test_slice_interval_too_short")
-    interval = Segment(0.0, 0.05)  # 50ms
+    # Need at least 2.1s for 100ms segment with 1s buffer on each side
+    interval = Segment(0.0, 2.0)  # 2s total, but only 0s valid after buffers
 
     segments = slice_segments_from_interval(
-        interval=interval, duration_ms=100, mode="speech"  # Need 100ms
+        interval=interval, duration_ms=100, mode="speech"  # Need 100ms + 2s buffers
     )
 
-    assert len(segments) == 0
+    assert len(segments) == 0  # Interval too short after buffers
     logger.info("[PASS] test_slice_interval_too_short")
 
 
@@ -147,15 +149,17 @@ def test_segment_metadata():
 
 
 def test_slice_various_durations():
-    """Test slicing at multiple target durations."""
+    """Test slicing at multiple target durations with safety buffers."""
     logger.info("Running test_slice_various_durations")
-    interval = Segment(0.0, 1.0)  # 1 second
+    # Use 5-second interval: valid zone is [1.0, 4.0] = 3 seconds after buffers
+    interval = Segment(0.0, 5.0)
 
     test_cases = [
-        (20, 50),  # 1000ms / 20ms = 50
-        (40, 25),  # 1000ms / 40ms = 25
-        (100, 10),  # 1000ms / 100ms = 10
-        (500, 2),  # 1000ms / 500ms = 2
+        (20, 150),  # 3000ms / 20ms = 150
+        (40, 75),  # 3000ms / 40ms = 75
+        (100, 30),  # 3000ms / 100ms = 30
+        (500, 6),  # 3000ms / 500ms = 6
+        (1000, 3),  # 3000ms / 1000ms = 3
     ]
 
     for duration_ms, expected_count in test_cases:
@@ -163,11 +167,18 @@ def test_slice_various_durations():
             interval=interval, duration_ms=duration_ms, mode="speech"
         )
 
-        assert len(segments) == expected_count, f"Failed for {duration_ms}ms"
+        assert (
+            len(segments) == expected_count
+        ), f"Failed for {duration_ms}ms: expected {expected_count}, got {len(segments)}"
 
         # Verify all segments have correct duration
         for seg in segments:
             assert abs(seg.duration - duration_ms / 1000.0) < 1e-6
+
+        # Verify all segments are within safety buffer zone [1.0, 4.0]
+        for seg in segments:
+            assert seg.start >= 1.0, f"Segment starts before buffer: {seg.start}"
+            assert seg.end <= 4.0, f"Segment ends after buffer: {seg.end}"
 
     logger.info("[PASS] test_slice_various_durations")
 
@@ -175,13 +186,14 @@ def test_slice_various_durations():
 def test_speech_nonspeech_mode():
     """Test that mode parameter is accepted."""
     logger.info("Running test_speech_nonspeech_mode")
-    interval = Segment(0.0, 1.0)
+    # Use 5s interval: valid zone is [1.0, 4.0] = 3s → 30 segments of 100ms
+    interval = Segment(0.0, 5.0)
 
     # Should work for both modes
     speech_segs = slice_segments_from_interval(interval, 100, mode="speech")
     nonspeech_segs = slice_segments_from_interval(interval, 100, mode="nonspeech")
 
-    assert len(speech_segs) == len(nonspeech_segs) == 10
+    assert len(speech_segs) == len(nonspeech_segs) == 30
     logger.info("[PASS] test_speech_nonspeech_mode")
 
 

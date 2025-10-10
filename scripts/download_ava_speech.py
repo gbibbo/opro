@@ -24,6 +24,7 @@ Requirements:
 import argparse
 import concurrent.futures as futures
 import logging
+import subprocess
 import sys
 from pathlib import Path
 
@@ -268,6 +269,77 @@ def download_videos(
                 logger.info(f"Removed {video_file.name}")
 
 
+def extract_audio_from_videos(videos_dir: Path, audio_dir: Path):
+    """Extract audio from video files using ffmpeg."""
+    ensure_dir(audio_dir)
+
+    # Check if ffmpeg is available
+    try:
+        result = subprocess.run(["ffmpeg", "-version"], capture_output=True, timeout=5)
+        if result.returncode != 0:
+            logger.error("ffmpeg not found. Please install ffmpeg to extract audio.")
+            logger.info("Install: https://ffmpeg.org/download.html")
+            return
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        logger.error("ffmpeg not found. Please install ffmpeg to extract audio.")
+        logger.info("Install: https://ffmpeg.org/download.html")
+        return
+
+    # Get all video files
+    video_files = (
+        list(videos_dir.glob("*.mp4"))
+        + list(videos_dir.glob("*.mkv"))
+        + list(videos_dir.glob("*.webm"))
+    )
+
+    if not video_files:
+        logger.warning("No video files found to extract audio from")
+        return
+
+    logger.info(f"Extracting audio from {len(video_files)} videos...")
+
+    for video_file in tqdm(video_files, desc="Extracting audio", unit="file"):
+        audio_file = audio_dir / f"{video_file.stem}.wav"
+
+        # Skip if audio already exists
+        if audio_file.exists():
+            logger.debug(f"Audio already exists: {audio_file.name}")
+            continue
+
+        try:
+            # Extract audio to WAV format (16kHz, mono, 16-bit)
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-i",
+                    str(video_file),
+                    "-vn",  # No video
+                    "-acodec",
+                    "pcm_s16le",  # 16-bit PCM
+                    "-ar",
+                    "16000",  # 16kHz sample rate
+                    "-ac",
+                    "1",  # Mono
+                    "-y",  # Overwrite
+                    str(audio_file),
+                ],
+                check=True,
+                capture_output=True,
+                timeout=300,
+            )
+            logger.info(f"✅ Extracted audio: {audio_file.name}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"❌ Failed to extract audio from {video_file.name}: {e}")
+        except subprocess.TimeoutExpired:
+            logger.error(f"❌ Timeout extracting audio from {video_file.name}")
+
+    # Summary
+    audio_count = len(list(audio_dir.glob("*.wav")))
+    total_audio_size = sum(f.stat().st_size for f in audio_dir.glob("*.wav"))
+    logger.info(f"Audio files extracted: {audio_count}")
+    logger.info(f"Total audio size: {human_size(total_audio_size)}")
+
+
 def download_ava_speech(
     data_root: Path,
     prototype: bool = True,
@@ -314,18 +386,30 @@ def download_ava_speech(
 
     download_videos(out_dir, list_path, max_videos, workers, prototype)
 
+    # Extract audio from videos
+    logger.info("=" * 80)
+    logger.info("Step 3: Extracting audio from videos")
+    logger.info("=" * 80)
+    videos_dir = out_dir / "videos" / "trainval"
+    audio_dir = out_dir / "audio"
+    extract_audio_from_videos(videos_dir, audio_dir)
+
     logger.info("=" * 80)
     logger.info("✅ AVA-Speech download complete!")
     logger.info("=" * 80)
 
     # Summary
-    videos_dir = out_dir / "videos" / "trainval"
-    video_count = len(list(videos_dir.glob("*.mp4")))
-    total_size = sum(f.stat().st_size for f in videos_dir.glob("*.mp4"))
+    video_count = len(list(videos_dir.glob("*.mp4"))) + len(list(videos_dir.glob("*.mkv")))
+    total_size = sum(f.stat().st_size for f in videos_dir.glob("*.mp4")) + sum(
+        f.stat().st_size for f in videos_dir.glob("*.mkv")
+    )
+    audio_count = len(list(audio_dir.glob("*.wav")))
 
     logger.info(f"Videos downloaded: {video_count}")
-    logger.info(f"Total size: {human_size(total_size)}")
-    logger.info(f"Location: {videos_dir}")
+    logger.info(f"Total video size: {human_size(total_size)}")
+    logger.info(f"Video location: {videos_dir}")
+    logger.info(f"Audio files: {audio_count}")
+    logger.info(f"Audio location: {audio_dir}")
 
 
 def main():

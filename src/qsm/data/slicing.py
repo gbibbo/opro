@@ -43,36 +43,56 @@ def slice_segments_from_interval(
     duration_ms: int,
     max_segments: int | None = None,
     mode: Literal["speech", "nonspeech"] = "speech",
+    safety_buffer_s: float = 1.0,
 ) -> list[Segment]:
     """
-    Slice fixed-duration segments from an interval.
+    Slice fixed-duration segments from an interval with safety buffers.
+
+    IMPORTANT: To be 100% sure of the label, we add 1-second buffers at the
+    start and end of each interval. This prevents extracting samples near
+    label transitions where we might have uncertainty.
+
+    Example:
+        If GT says NO_SPEECH from 0-10s and SPEECH from 10-20s:
+        - For NO_SPEECH: we only use seconds 0-9 (1s before transition)
+        - For SPEECH: we only use seconds 11-19 (1s after start, 1s before end)
 
     Args:
         interval: Source interval (must be completely speech or nonspeech)
         duration_ms: Target duration in milliseconds
         max_segments: Maximum number of segments to extract
         mode: 'speech' or 'nonspeech'
+        safety_buffer_s: Safety buffer in seconds (default: 1.0s)
 
     Returns:
-        List of Segment objects
+        List of Segment objects with guaranteed labels
     """
     duration_s = duration_ms / 1000.0
-    interval_duration = interval.duration
 
-    if interval_duration < duration_s:
-        return []  # Interval too short
+    # Apply safety buffers: shrink interval by 1s at start and 1s at end
+    safe_start = interval.start + safety_buffer_s
+    safe_end = interval.end - safety_buffer_s
 
-    # Calculate how many segments fit
-    num_segments = int(interval_duration / duration_s)
+    # Check if interval is still valid after applying buffers
+    safe_duration = safe_end - safe_start
+
+    if safe_duration < duration_s:
+        return []  # Interval too short after applying safety buffers
+
+    # Calculate how many segments fit in the safe region
+    num_segments = int(safe_duration / duration_s)
 
     if max_segments is not None:
         num_segments = min(num_segments, max_segments)
 
     segments = []
     for i in range(num_segments):
-        start = interval.start + i * duration_s
+        start = safe_start + i * duration_s
         end = start + duration_s
-        segments.append(Segment(start, end))
+
+        # Double-check we're within safe bounds
+        if end <= safe_end:
+            segments.append(Segment(start, end))
 
     return segments
 
@@ -106,7 +126,7 @@ def create_segments(
     for duration_ms in durations_ms:
         logger.info(f"Processing duration: {duration_ms}ms")
 
-        # Extract speech segments
+        # Extract ONLY speech segments (NONSPEECH not needed for temporal threshold measurement)
         speech_segs = _extract_segments_for_duration(
             frame_table=frame_table.speech_segments,
             duration_ms=duration_ms,
@@ -114,21 +134,7 @@ def create_segments(
             max_segments=max_segments_per_config,
         )
 
-        # Extract nonspeech segments
-        nonspeech_segs = _extract_segments_for_duration(
-            frame_table=frame_table.nonspeech_segments,
-            duration_ms=duration_ms,
-            label="NONSPEECH",
-            max_segments=max_segments_per_config,
-        )
-
-        # Balance
-        min_count = min(len(speech_segs), len(nonspeech_segs))
-        speech_segs = speech_segs[:min_count]
-        nonspeech_segs = nonspeech_segs[:min_count]
-
         all_segments.extend(speech_segs)
-        all_segments.extend(nonspeech_segs)
 
     # Export audio and metadata
     metadata_records = []

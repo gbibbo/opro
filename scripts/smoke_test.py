@@ -118,7 +118,7 @@ def test_data_structures():
 
 
 def test_slicing():
-    """Test segment slicing."""
+    """Test segment slicing with safety buffers."""
     logger.info("Testing slicing...")
 
     try:
@@ -126,19 +126,28 @@ def test_slicing():
 
         from qsm.data.slicing import slice_segments_from_interval
 
-        interval = Segment(0.0, 1.0)
+        # Use 5s interval: with 1s safety buffers, valid zone is [1.0, 4.0] = 3s
+        interval = Segment(0.0, 5.0)
 
         segments = slice_segments_from_interval(interval=interval, duration_ms=100, mode="speech")
 
-        assert len(segments) == 10
-        assert segments[0].duration == 0.1
+        logger.info(f"Created {len(segments)} segments")
+        logger.info(f"First segment: {segments[0]}")
+        logger.info(f"Last segment: {segments[-1]}")
 
-        logger.info(f"[PASS] Slicing working (created {len(segments)} segments)")
+        # 3s / 100ms = 30 segments
+        assert len(segments) == 30, f"Expected 30 segments, got {len(segments)}"
+        assert abs(segments[0].duration - 0.1) < 1e-6, f"Expected duration ~0.1, got {segments[0].duration}"
+        # Verify segments are within buffer zone
+        assert segments[0].start >= 1.0, f"Expected start >= 1.0, got {segments[0].start}"
+        assert segments[-1].end <= 4.0, f"Expected end <= 4.0, got {segments[-1].end}"
+
+        logger.info(f"[PASS] Slicing working (created {len(segments)} segments with safety buffers)")
 
         return True
 
     except Exception as e:
-        logger.error(f"[FAIL] Slicing test failed: {e}")
+        logger.error(f"[FAIL] Slicing test failed: {e}", exc_info=True)
         return False
 
 
