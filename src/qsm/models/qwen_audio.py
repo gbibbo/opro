@@ -102,10 +102,7 @@ class Qwen2AudioClassifier:
             # Standard loading
             model_kwargs["device_map"] = device if device == "cuda" else None
 
-        self.model = Qwen2AudioForConditionalGeneration.from_pretrained(
-            model_name,
-            **model_kwargs
-        )
+        self.model = Qwen2AudioForConditionalGeneration.from_pretrained(model_name, **model_kwargs)
 
         if device == "cpu" and not (load_in_4bit or load_in_8bit):
             self.model = self.model.to(device)
@@ -126,7 +123,9 @@ class Qwen2AudioClassifier:
 
         print("Model loaded successfully!")
         if self.auto_pad:
-            print(f"Auto-padding enabled: <{self.pad_target_ms}ms -> {self.pad_target_ms}ms (noise amplitude: {self.pad_noise_amplitude})")
+            print(
+                f"Auto-padding enabled: <{self.pad_target_ms}ms -> {self.pad_target_ms}ms (noise amplitude: {self.pad_noise_amplitude})"
+            )
 
     def _pad_audio_with_noise(
         self,
@@ -218,7 +217,7 @@ class Qwen2AudioClassifier:
             audio=audio,  # Singular, numpy array directly
             sampling_rate=sr,  # Explicitly pass to avoid warnings
             return_tensors="pt",
-            padding=True
+            padding=True,
         )
 
         # Move to device
@@ -234,7 +233,7 @@ class Qwen2AudioClassifier:
 
         # Decode ONLY the generated tokens (not the input prompt)
         # outputs contains [input_tokens][generated_tokens], we only want the new ones
-        input_length = inputs['input_ids'].shape[1]
+        input_length = inputs["input_ids"].shape[1]
         generated_tokens = outputs[:, input_length:]
 
         output_text = self.processor.batch_decode(
