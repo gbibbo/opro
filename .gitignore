@@ -27,6 +27,8 @@ ENV/
 env/
 .venv
 
+.claude/settings.local.json
+
 # Conda
 *.conda
 *.tar.bz2
