@@ -70,14 +70,21 @@ data/cache/*
 # ESC-50 dataset (cloned repo)
 data/ESC-50/
 
-# Models and checkpoints
+# Models and checkpoints (downloaded model files only, not Python code)
 *.pt
 *.pth
 *.bin
 *.safetensors
 checkpoints/
-models/
+models/*.bin
+models/*.safetensors
+models/*.pt
+models/*.pth
 wandb/
+
+# Allow Python model implementations
+!src/qsm/models/
+!src/qsm/models/*.py
 
 # Logs (all test outputs)
 logs/
@@ -137,11 +144,20 @@ data/raw/**/repo/
 data/raw/**/*.csv
 !data/raw/**/*_sample.csv
 
-# Experiment results
-results/
+# Experiment results (large files only)
+results/*.png
+results/*.jpg
+results/*.jpeg
+results/*.wav
+results/*.mp3
 outputs/
 assets/paper_figs/*
 !assets/paper_figs/.gitkeep
+
+# Allow evaluation results (parquet files are small and essential)
+!results/*.parquet
+!results/*.csv
+!results/*.json
 
 # Coverage reports
 .coverage.*

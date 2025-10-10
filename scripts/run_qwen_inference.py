@@ -9,7 +9,7 @@ Usage:
 
 import argparse
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
@@ -54,6 +54,7 @@ def evaluate_model_on_segments(
     print(f"Total segments: {len(df)}")
     print(f"SPEECH: {(df['label'] == 'SPEECH').sum()}")
     print(f"NONSPEECH: {(df['label'] == 'NONSPEECH').sum()}")
+    print(f"Segments dir: {segments_dir}")
     print(f"{'='*80}\n")
 
     # Run predictions
@@ -61,11 +62,20 @@ def evaluate_model_on_segments(
     latencies = []
 
     for idx, row in tqdm(df.iterrows(), total=len(df), desc="Processing segments"):
-        audio_path = segments_dir / Path(row["audio_path"]).name
+        # Handle both absolute and relative paths, extract filename only
+        # Use PureWindowsPath to handle Windows-style paths with backslashes
+        audio_filename = PureWindowsPath(row["audio_path"]).name
+        audio_path = segments_dir / audio_filename
 
         if not audio_path.exists():
-            print(f"Warning: Audio file not found: {audio_path}")
-            continue
+            # Try alternative: if audio_path in metadata is relative, use it as-is
+            alt_path = Path(row["audio_path"])
+            if alt_path.exists():
+                audio_path = alt_path
+            else:
+                print(f"Warning: Audio file not found: {audio_path}")
+                print(f"  Also tried: {alt_path}")
+                continue
 
         try:
             prediction = model.predict(audio_path)
@@ -242,6 +252,18 @@ def main():
         help="Limit number of segments to process (for testing)",
     )
 
+    parser.add_argument(
+        "--load-in-4bit",
+        action="store_true",
+        help="Use 4-bit quantization (saves VRAM, requires bitsandbytes)",
+    )
+
+    parser.add_argument(
+        "--load-in-8bit",
+        action="store_true",
+        help="Use 8-bit quantization (saves VRAM, requires bitsandbytes)",
+    )
+
     args = parser.parse_args()
 
     # Check if segments directory exists
@@ -264,6 +286,8 @@ def main():
         model_name=args.model_name,
         device=args.device,
         torch_dtype=args.dtype,
+        load_in_4bit=args.load_in_4bit,
+        load_in_8bit=args.load_in_8bit,
     )
 
     # Run evaluation
