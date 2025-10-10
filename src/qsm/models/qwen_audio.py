@@ -1,6 +1,5 @@
 """Qwen2-Audio wrapper for binary SPEECH/NONSPEECH classification."""
 
-import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,7 +9,7 @@ import librosa
 import numpy as np
 import soundfile as sf
 import torch
-from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
 
 
 @dataclass
@@ -76,9 +75,9 @@ class Qwen2AudioClassifier:
         print(f"  Device: {device}")
         print(f"  Dtype: {torch_dtype}")
         if load_in_4bit:
-            print(f"  Quantization: 4-bit")
+            print("  Quantization: 4-bit")
         elif load_in_8bit:
-            print(f"  Quantization: 8-bit")
+            print("  Quantization: 8-bit")
 
         # Load processor and model
         self.processor = AutoProcessor.from_pretrained(model_name)
@@ -125,7 +124,7 @@ class Qwen2AudioClassifier:
             "Answer with ONLY the letter (A, B, C, or D)."
         )
 
-        print(f"Model loaded successfully!")
+        print("Model loaded successfully!")
         if self.auto_pad:
             print(f"Auto-padding enabled: <{self.pad_target_ms}ms -> {self.pad_target_ms}ms (noise amplitude: {self.pad_noise_amplitude})")
 
