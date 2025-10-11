@@ -7,8 +7,8 @@ Modules:
   - reverb: Reverberation (RIR convolution)
 """
 
+from .filters import apply_bandpass, apply_highpass, apply_lowpass
 from .noise import add_white_noise, mix_at_snr
-from .filters import apply_bandpass, apply_lowpass, apply_highpass
 from .reverb import apply_rir, load_rir_database
 
 __all__ = [

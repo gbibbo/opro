@@ -6,7 +6,6 @@ Computes RMS over the effective segment (excludes padding) to avoid inflating SN
 """
 
 import numpy as np
-from typing import Tuple, Optional
 
 
 def compute_rms(audio: np.ndarray) -> float:
@@ -26,9 +25,9 @@ def add_white_noise(
     audio: np.ndarray,
     snr_db: float,
     effective_start: int = 0,
-    effective_end: Optional[int] = None,
-    seed: Optional[int] = None,
-) -> Tuple[np.ndarray, dict]:
+    effective_end: int | None = None,
+    seed: int | None = None,
+) -> tuple[np.ndarray, dict]:
     """
     Mix white noise into audio at target SNR.
 
@@ -102,9 +101,9 @@ def mix_at_snr(
     snr_db: float,
     sr: int,
     padding_ms: int = 2000,
-    effective_dur_ms: Optional[float] = None,
-    seed: Optional[int] = None,
-) -> Tuple[np.ndarray, dict]:
+    effective_dur_ms: float | None = None,
+    seed: int | None = None,
+) -> tuple[np.ndarray, dict]:
     """
     High-level convenience wrapper for adding noise to padded containers.
 

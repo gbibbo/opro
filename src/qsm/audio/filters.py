@@ -5,10 +5,10 @@ Implements telephony band-pass (300-3400 Hz) and ablation filters (LP/HP).
 Uses zero-phase Butterworth IIR filters for clean frequency response.
 """
 
-import numpy as np
-from scipy import signal
 from typing import Literal
 
+import numpy as np
+from scipy import signal
 
 FilterType = Literal["bandpass", "lowpass", "highpass"]
 

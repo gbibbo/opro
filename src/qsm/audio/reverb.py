@@ -5,12 +5,12 @@ Uses OpenSLR SLR28 RIRS_NOISES dataset.
 Dataset: https://www.openslr.org/28/
 """
 
-import numpy as np
+import json
 from pathlib import Path
-from typing import Optional, Dict, List
+
+import numpy as np
 import soundfile as sf
 from scipy import signal
-import json
 
 
 class RIRDatabase:
@@ -28,7 +28,7 @@ class RIRDatabase:
       - source_dist: (optional) source-mic distance
     """
 
-    def __init__(self, rir_root: Path, metadata_path: Optional[Path] = None):
+    def __init__(self, rir_root: Path, metadata_path: Path | None = None):
         """
         Initialize RIR database.
 
@@ -38,7 +38,7 @@ class RIRDatabase:
         """
         self.rir_root = Path(rir_root)
         self.metadata_path = metadata_path
-        self.rirs: Dict[str, dict] = {}
+        self.rirs: dict[str, dict] = {}
         self._load_database()
 
     def _load_database(self):
@@ -67,7 +67,7 @@ class RIRDatabase:
 
         # Load metadata if available
         if self.metadata_path and Path(self.metadata_path).exists():
-            with open(self.metadata_path, "r") as f:
+            with open(self.metadata_path) as f:
                 metadata = json.load(f)
             for rir_id, meta in metadata.items():
                 if rir_id in self.rirs:
@@ -101,7 +101,7 @@ class RIRDatabase:
 
         return rir
 
-    def get_by_t60(self, t60_min: float, t60_max: float) -> List[str]:
+    def get_by_t60(self, t60_min: float, t60_max: float) -> list[str]:
         """
         Get RIR IDs within T60 range.
 
@@ -119,7 +119,7 @@ class RIRDatabase:
             and t60_min <= meta["T60"] <= t60_max
         ]
 
-    def list_all(self) -> List[str]:
+    def list_all(self) -> list[str]:
         """List all available RIR IDs."""
         return list(self.rirs.keys())
 
@@ -161,7 +161,7 @@ def apply_rir(
     return reverb.astype(audio.dtype)
 
 
-def load_rir_database(rir_root: Path, metadata_path: Optional[Path] = None) -> RIRDatabase:
+def load_rir_database(rir_root: Path, metadata_path: Path | None = None) -> RIRDatabase:
     """
     Convenience function to load RIR database.
 
