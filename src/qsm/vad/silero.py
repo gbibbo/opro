@@ -74,7 +74,7 @@ class SileroVAD(VADModel):
         """Model name for logging/results."""
         return f"silero_vad_{self.frame_duration_ms}ms_thr{self._threshold:.2f}"
 
-    def predict_frames(self, audio: np.ndarray, sample_rate: int) -> list[bool]:
+    def predict_frames(self, audio: np.ndarray, sample_rate: int) -> tuple[list[bool], list[float]]:
         """
         Predict speech presence frame-by-frame.
 
@@ -83,7 +83,9 @@ class SileroVAD(VADModel):
             sample_rate: Sample rate in Hz
 
         Returns:
-            List of boolean decisions (True = speech, False = nonspeech) per frame
+            Tuple of (frame_decisions, frame_probabilities)
+            - frame_decisions: List of boolean decisions (True = speech, False = nonspeech)
+            - frame_probabilities: List of speech probabilities [0, 1]
         """
         if sample_rate != self._sample_rate:
             raise ValueError(
@@ -111,6 +113,7 @@ class SileroVAD(VADModel):
         # Process frame by frame
         num_frames = len(audio_tensor) // self._window_size_samples
         frame_decisions = []
+        frame_probabilities = []
 
         with torch.no_grad():
             for i in range(num_frames):
@@ -120,12 +123,13 @@ class SileroVAD(VADModel):
 
                 # Get speech probability
                 speech_prob = self.model(frame, self._sample_rate).item()
+                frame_probabilities.append(speech_prob)
 
                 # Apply threshold
                 is_speech = speech_prob >= self._threshold
                 frame_decisions.append(is_speech)
 
-        return frame_decisions
+        return frame_decisions, frame_probabilities
 
     def predict(self, audio_path: Path) -> VADPrediction:
         """
@@ -155,15 +159,17 @@ class SileroVAD(VADModel):
             audio = audio[indices]
             sr = self._sample_rate
 
-        # Get frame decisions
-        frame_decisions = self.predict_frames(audio, sr)
+        # Get frame decisions and probabilities
+        frame_decisions, frame_probabilities = self.predict_frames(audio, sr)
 
-        # Aggregate: percentage of speech frames
-        speech_ratio = sum(frame_decisions) / len(frame_decisions) if frame_decisions else 0.0
+        # NEW LOGIC: If ANY frame has speech probability > threshold, classify as SPEECH
+        # This is more appropriate for short segments where even a brief speech detection matters
+        max_speech_prob = max(frame_probabilities) if frame_probabilities else 0.0
+        has_speech_frame = max_speech_prob >= self._threshold
 
-        # Decision: SPEECH if majority of frames are speech
-        label = "SPEECH" if speech_ratio >= 0.5 else "NONSPEECH"
-        confidence = speech_ratio if label == "SPEECH" else (1.0 - speech_ratio)
+        # For confidence, use the maximum probability found
+        label = "SPEECH" if has_speech_frame else "NONSPEECH"
+        confidence = max_speech_prob if label == "SPEECH" else (1.0 - max_speech_prob)
 
         # Calculate latency
         latency_ms = (time.time() - start_time) * 1000

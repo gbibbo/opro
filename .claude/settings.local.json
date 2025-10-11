@@ -36,7 +36,10 @@
       "Bash(test_with_padding.py )",
       "Bash(verify_audio_content.py )",
       "Bash(visualize_padding.py)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(python:*)",
+      "Bash(timeout:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

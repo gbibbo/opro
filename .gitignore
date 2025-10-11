@@ -162,3 +162,16 @@ assets/paper_figs/*
 # Coverage reports
 .coverage.*
 coverage.xml
+
+# Sprint 5 additions - Psychoacoustic conditions
+# RIR dataset (large: 60,000+ files, ~8GB from OpenSLR SLR28)
+data/external/
+
+# Evaluation results directory (generated outputs)
+results/
+
+# Scratch/temporary documentation
+docs/scratch/
+
+# Windows error files
+nul
