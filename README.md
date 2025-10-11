@@ -1,6 +1,6 @@
 # Qwen Speech Minimum (QSM)
 
-**Status:** ✅ Sprint 4 Complete | 🎯 Qwen2-Audio Validated (85% Accuracy)
+**Status:** ✅ Sprint 5 Complete | 🎯 Psychoacoustic Conditions Implemented
 
 Temporal threshold measurement and optimization for speech detection in Qwen models.
 
@@ -11,7 +11,31 @@ Temporal threshold measurement and optimization for speech detection in Qwen mod
 - **Sprint 2 (Segment Extraction):** ✅ COMPLETE
 - **Sprint 3 (VAD Baseline):** ✅ COMPLETE - Silero-VAD baseline established
 - **Sprint 4 (Model Inference):** ✅ COMPLETE - Qwen2-Audio validated at 85% accuracy
-- **Dataset:** ✅ 1,016 clean segments (640 SPEECH + 376 NONSPEECH)
+- **Sprint 5 (Psychoacoustic Conditions):** ✅ COMPLETE - SNR, band-limiting, reverb generators
+- **Dataset:** ✅ 1,016 clean segments (640 SPEECH + 376 NONSPEECH) + 240 psychoacoustic variants
+
+## 🎉 Sprint 5 Complete - Psychoacoustic Conditions
+
+### Key Results
+- **Reverb:** 100% accuracy (unexpected improvement vs 70% baseline)
+- **Band-limiting:** 85% accuracy (lowpass 3400Hz optimal at 90%)
+- **SNR:** 70% accuracy (non-monotonic: +5dB worst 60%, +20dB best 85%)
+- **Total variants:** 240 (120 SNR + 60 band + 60 reverb)
+
+### Psychoacoustic Modules Implemented
+- **`src/qsm/audio/noise.py`**: White noise / SNR sweep (6 levels: -10 to +20 dB)
+- **`src/qsm/audio/filters.py`**: Band-limited filtering (telephony 300-3400Hz, LP 3400Hz, HP 300Hz)
+- **`src/qsm/audio/reverb.py`**: RIR convolution (3 T60 levels: 0.3s, 1.0s, 2.5s)
+
+### Key Findings
+1. **Reverb improves performance** (100% vs 70% baseline) - acoustic richness helps
+2. **Low frequencies critical** - Lowpass 3400Hz improves to 90%
+3. **SNR non-monotonic** - Highest SNR (+20dB) performs best, moderate SNR (+5dB) worst
+4. **Validated acoustic accuracy** - SNR ±0.01 dB, filters meet ITU-T telephony standards
+
+**See [SPRINT5_FINAL_REPORT.md](SPRINT5_FINAL_REPORT.md) for complete implementation details.**
+
+---
 
 ## 🎉 Sprint 4 Complete - Qwen2-Audio Validated
 
@@ -120,14 +144,37 @@ python scripts/evaluate_extended.py
 
 **See [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md) for detailed configuration and results.**
 
-### 5. Validate Segments
+### 5. Generate Psychoacoustic Conditions (Sprint 5)
+
+```bash
+# Download RIR dataset (OpenSLR SLR28, ~8GB)
+python scripts/download_rirs.py --output_dir data/external/RIRS_NOISES
+
+# Generate all psychoacoustic variants (240 total)
+python scripts/apply_psychoacoustic_conditions.py \
+    --input_manifest data/processed/qsm_dev_padded.jsonl \
+    --output_dir data/processed/psychoacoustic_conditions \
+    --snr_levels -10,-5,0,5,10,20 \
+    --band_filters telephony,lp3400,hp300 \
+    --selected_rirs data/external/RIRS_NOISES/selected_rirs.json
+
+# Evaluate Qwen2-Audio on conditions
+python scripts/evaluate_conditions.py \
+    --condition_type snr \
+    --manifest data/processed/psychoacoustic_conditions/snr/snr_manifest.parquet \
+    --output results/qwen_snr_evaluation.parquet
+```
+
+**See [SPRINT5_FINAL_REPORT.md](SPRINT5_FINAL_REPORT.md) for complete usage guide.**
+
+### 6. Validate Segments
 
 ```bash
 # Interactive player (WSL-compatible)
 python scripts/play_segments_interactive.py --segments-dir data/segments/ava_speech/train --min-duration 500
 ```
 
-### 6. Verify Dataset
+### 7. Verify Dataset
 
 ```python
 import pandas as pd
@@ -149,32 +196,50 @@ print(esc['condition'].value_counts().sort_index())
 ```
 qwen-speech-min/
 ├── scripts/
-│   ├── make_segments_ava.py          # Generate AVA segments
-│   ├── make_segments_voxconverse.py  # Generate VoxConverse segments
-│   ├── make_segments_esc50.py        # Generate ESC-50 NONSPEECH (cleaned)
-│   ├── clean_esc50_dataset.py        # Remove ambiguous sounds
-│   ├── run_vad_baseline.py           # Evaluate Silero-VAD
-│   ├── run_qwen_inference.py         # Run Qwen2-Audio inference (basic)
-│   ├── evaluate_extended.py          # Full Qwen2-Audio evaluation (240 samples)
-│   └── play_segments_interactive.py  # Validate segments (WSL-compatible)
+│   ├── make_segments_ava.py                     # Generate AVA segments
+│   ├── make_segments_voxconverse.py             # Generate VoxConverse segments
+│   ├── make_segments_esc50.py                   # Generate ESC-50 NONSPEECH (cleaned)
+│   ├── clean_esc50_dataset.py                   # Remove ambiguous sounds
+│   ├── run_vad_baseline.py                      # Evaluate Silero-VAD
+│   ├── run_qwen_inference.py                    # Run Qwen2-Audio inference (basic)
+│   ├── evaluate_extended.py                     # Full Qwen2-Audio evaluation (240 samples)
+│   ├── play_segments_interactive.py             # Validate segments (WSL-compatible)
+│   ├── apply_psychoacoustic_conditions.py       # Generate psychoacoustic variants (Sprint 5)
+│   ├── evaluate_conditions.py                   # Evaluate Qwen on psychoacoustic conditions
+│   ├── download_rirs.py                         # Download OpenSLR SLR28 RIR dataset
+│   ├── extract_rir_t60.py                       # Extract T60 from RIR dataset
+│   └── select_representative_rirs.py            # Select representative RIRs
 ├── src/qsm/
+│   ├── audio/                                   # 🆕 Sprint 5: Psychoacoustic modules
+│   │   ├── noise.py                            # White noise / SNR sweep
+│   │   ├── filters.py                          # Band-limited filtering
+│   │   └── reverb.py                           # RIR convolution
 │   ├── data/
-│   │   ├── loaders.py   # RTTM, AVA-Speech loaders
-│   │   └── slicing.py   # Segment extraction with safety buffers
+│   │   ├── loaders.py                          # RTTM, AVA-Speech loaders
+│   │   └── slicing.py                          # Segment extraction with safety buffers
 │   ├── models/
-│   │   └── qwen_audio.py  # Qwen2-Audio classifier wrapper
+│   │   └── qwen_audio.py                       # Qwen2-Audio classifier wrapper
 │   └── vad/
-│       ├── base.py      # VAD abstract interface
-│       └── silero.py    # Silero-VAD implementation
-├── data/segments/
-│   ├── ava_speech/train/      # 320 AVA SPEECH segments
-│   ├── voxconverse/dev/       # 320 VoxConverse SPEECH segments
-│   └── esc50/nonspeech/       # 376 ESC-50 NONSPEECH segments (cleaned)
+│       ├── base.py                             # VAD abstract interface
+│       └── silero.py                           # Silero-VAD implementation
+├── data/
+│   ├── segments/
+│   │   ├── ava_speech/train/                   # 320 AVA SPEECH segments
+│   │   ├── voxconverse/dev/                    # 320 VoxConverse SPEECH segments
+│   │   └── esc50/nonspeech/                    # 376 ESC-50 NONSPEECH segments (cleaned)
+│   └── processed/psychoacoustic_conditions/    # 🆕 240 psychoacoustic variants
+│       ├── snr/                                # 120 SNR variants
+│       ├── band/                               # 60 band-limiting variants
+│       └── reverb/                             # 60 reverb variants
 ├── results/
-│   ├── vad_baseline/                              # Silero-VAD evaluation results
+│   ├── vad_baseline/                           # Silero-VAD evaluation results
 │   ├── qwen_extended_evaluation_with_padding.parquet  # Qwen detailed results
-│   └── qwen_extended_summary.parquet              # Qwen summary by duration
-└── SPRINT_4_SETUP.md          # Detailed GPU setup guide
+│   ├── qwen_extended_summary.parquet           # Qwen summary by duration
+│   ├── qwen_snr_evaluation.parquet             # 🆕 SNR evaluation results
+│   ├── qwen_band_evaluation.parquet            # 🆕 Band-limiting evaluation results
+│   └── qwen_reverb_evaluation.parquet          # 🆕 Reverb evaluation results
+├── SPRINT_4_SETUP.md                           # Detailed GPU setup guide
+└── SPRINT5_FINAL_REPORT.md                     # 🆕 Sprint 5 complete report
 ```
 
 ## Datasets
@@ -288,6 +353,7 @@ See [pyproject.toml](pyproject.toml) for complete list.
 - [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md) - Complete implementation details and findings
 - [SPRINT_0_COMPLETE.md](SPRINT_0_COMPLETE.md) - Sprint 0 summary
 - [SPRINT_4_SETUP.md](SPRINT_4_SETUP.md) - Qwen2-Audio inference setup (GPU requirements)
+- [SPRINT5_FINAL_REPORT.md](SPRINT5_FINAL_REPORT.md) - 🆕 Sprint 5: Psychoacoustic conditions (complete report)
 
 ## Results
 
@@ -307,6 +373,19 @@ Results available:
 - **Good (80-94%):** 60ms, 100ms, 200ms, 500ms
 - **Partial (60-79%):** 40ms
 - **Poor (<60%):** 20ms
+
+### Psychoacoustic Conditions (Sprint 5) 🆕
+Results available:
+- SNR: [results/qwen_snr_evaluation.parquet](results/qwen_snr_evaluation.parquet) - 70% avg accuracy
+- Band-limiting: [results/qwen_band_evaluation.parquet](results/qwen_band_evaluation.parquet) - 85% avg accuracy
+- Reverb: [results/qwen_reverb_evaluation.parquet](results/qwen_reverb_evaluation.parquet) - 100% accuracy
+
+**Key Findings:**
+- **Reverb improves performance** (100% vs 70% baseline)
+- **Low-frequency cues critical** (Lowpass 3400Hz: 90%)
+- **SNR non-monotonic** (+20dB best: 85%, +5dB worst: 60%)
+
+**See [SPRINT5_FINAL_REPORT.md](SPRINT5_FINAL_REPORT.md) for detailed analysis.**
 
 ### Comparison: Qwen vs Silero-VAD
 | Metric | Qwen2-Audio | Silero-VAD |
@@ -331,4 +410,4 @@ Apache-2.0
 
 ---
 
-**Sprint 4 Complete:** Qwen2-Audio validated at 85% overall accuracy (96.7% on ≥80ms segments). Ready for Sprint 5 (threshold analysis) and Sprint 6 (OPRO optimization). See [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md) for complete implementation details.
+**Sprint 5 Complete:** Psychoacoustic condition generators implemented and validated. Three audio manipulation modules (SNR, band-limiting, reverb) created with 240 condition variants evaluated. Key finding: Reverb improves Qwen2-Audio performance (100% accuracy). See [SPRINT5_FINAL_REPORT.md](SPRINT5_FINAL_REPORT.md) for complete implementation details.

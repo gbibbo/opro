@@ -18,7 +18,7 @@ def compute_rms(audio: np.ndarray) -> float:
     Returns:
         RMS value
     """
-    return np.sqrt(np.mean(audio ** 2))
+    return np.sqrt(np.mean(audio**2))
 
 
 def add_white_noise(
@@ -61,7 +61,10 @@ def add_white_noise(
     if rms_signal < 1e-8:
         # Silent segment: use minimal noise level instead of SNR-based mixing
         import warnings
-        warnings.warn(f"Effective segment has near-zero RMS ({rms_signal:.2e}); using minimal noise")
+
+        warnings.warn(
+            f"Effective segment has near-zero RMS ({rms_signal:.2e}); using minimal noise"
+        )
 
         target_rms_noise = 1e-4  # Minimal noise level
         current_rms_noise = compute_rms(noise)

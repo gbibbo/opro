@@ -115,8 +115,7 @@ class RIRDatabase:
         return [
             rir_id
             for rir_id, meta in self.rirs.items()
-            if meta.get("T60") is not None
-            and t60_min <= meta["T60"] <= t60_max
+            if meta.get("T60") is not None and t60_min <= meta["T60"] <= t60_max
         ]
 
     def list_all(self) -> list[str]:
@@ -153,8 +152,8 @@ def apply_rir(
 
     # Normalize to preserve energy
     if normalize:
-        rms_orig = np.sqrt(np.mean(audio ** 2))
-        rms_reverb = np.sqrt(np.mean(reverb ** 2))
+        rms_orig = np.sqrt(np.mean(audio**2))
+        rms_reverb = np.sqrt(np.mean(reverb**2))
         if rms_reverb > 1e-8:
             reverb = reverb * (rms_orig / rms_reverb)
 

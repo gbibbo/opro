@@ -39,7 +39,8 @@
       "Bash(findstr:*)",
       "Bash(python:*)",
       "Bash(timeout:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(black:*)"
     ],
     "deny": [],
     "ask": []
