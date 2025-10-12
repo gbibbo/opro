@@ -39,7 +39,7 @@ def test_imports():
             apply_bandpass,
             apply_rir,
         )
-        from qsm.models import QwenAudioClassifier
+        from qsm.models import Qwen2AudioClassifier
         from qsm.data import load_dataset
 
         print("   [OK] All core modules importable")
