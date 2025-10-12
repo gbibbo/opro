@@ -112,12 +112,9 @@ def load_complete_clips_dataset(
     # Normalize labels
     df["label_normalized"] = df["label"].str.replace("-", "").str.replace("_", "")
 
-    # Extract base clip name (remove duration suffix)
-    df["clip_base"] = df["clip_id"].str.replace(r'_\d+ms', '', regex=True)
-
-    # Get unique base clips per label
-    speech_clips = df[df["label_normalized"] == "SPEECH"]["clip_base"].unique()
-    nonspeech_clips = df[df["label_normalized"] == "NONSPEECH"]["clip_base"].unique()
+    # Get unique clips per label (clip_id already represents the base clip)
+    speech_clips = df[df["label_normalized"] == "SPEECH"]["clip_id"].unique()
+    nonspeech_clips = df[df["label_normalized"] == "NONSPEECH"]["clip_id"].unique()
 
     # Sample n_clips/2 from each class
     n_per_class = n_clips // 2
@@ -140,7 +137,7 @@ def load_complete_clips_dataset(
 
     # Get ALL variants of selected clips
     selected_clips = list(selected_speech_clips) + list(selected_nonspeech_clips)
-    selected_df = df[df["clip_base"].isin(selected_clips)]
+    selected_df = df[df["clip_id"].isin(selected_clips)]
 
     # Shuffle
     selected_df = selected_df.sample(frac=1.0, random_state=seed).reset_index(drop=True)

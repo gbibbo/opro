@@ -1,0 +1,82 @@
+================================================================================
+OPRO QWEN PROJECT - CLEANUP SUMMARY
+================================================================================
+Date: 2025-10-12
+Status: COMPLETE
+
+SPACE FREED
+-----------
+Total: 1.27 GB (1299 MB)
+
+Removed Directories:
+  - conditions/              385.4 MB
+  - conditions_refactored/   744.3 MB
+  - conditions_high_noise/    85.7 MB
+  - conditions_correct/       64.3 MB
+  - psychoacoustic_conditions/ 14.9 MB
+  - reverb_variants/           3.7 MB
+  - 11x test/debug directories  0.4 MB
+
+Removed Files:
+  - Old parquet/jsonl manifests
+  - Temporary evaluation results
+
+CURRENT STRUCTURE
+-----------------
+data/processed/ (155 MB):
+  - conditions_final/    111 MB  [KEEP - Final correct dataset]
+  - padded/               44 MB  [KEEP - Original audio]
+  - manifests             44 KB  [KEEP - Dataset metadata]
+
+results/ (326 KB):
+  - debug_2clips_v2/     308 KB  [KEEP - Latest evaluation, 96.25% accuracy]
+  - evaluation_*.json     12 KB  [KEEP - Config and metrics]
+
+KEY DOCUMENTATION
+-----------------
+1. HALLAZGOS_SNR_INVESTIGATION.md
+   - Complete technical investigation
+   - SNR verification (confirmed correct)
+   - Root cause analysis
+
+2. PROJECT_STRUCTURE.md
+   - Clean project organization
+   - Usage instructions
+   - Evaluation results summary
+
+3. scripts/cleanup_project.py
+   - Automated cleanup script
+   - Can be run again if needed
+
+SCRIPTS UPDATED
+---------------
+1. debug_evaluate.py
+   - Fixed: Empty DataFrame crash
+   - Added: Better error handling
+
+2. analyze_snr_samples.py
+   - Fixed: Windows/Linux path compatibility
+   - Fixed: Empty DataFrame handling
+   - Added: SNR measurement verification
+
+KEY FINDINGS (from investigation)
+----------------------------------
+1. SNR generation is CORRECT (measured error <1%)
+2. Model achieves 96.25% accuracy overall
+3. Only 2 errors from same problematic clip
+4. No bugs in audio processing pipeline
+5. Issue is clip-specific, not systematic
+
+NEXT STEPS
+----------
+1. Run larger evaluation (50-100 clips) for statistics
+2. Analyze problematic clips characteristics
+3. Consider fine-tuning if needed
+
+MAINTENANCE
+-----------
+- Run cleanup_project.py periodically
+- Keep only latest evaluation results
+- Archive old results if needed for comparison
+
+================================================================================

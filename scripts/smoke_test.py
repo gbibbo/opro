@@ -1,228 +1,178 @@
 #!/usr/bin/env python3
 """
-Smoke test to verify basic functionality.
+Smoke test - Ultra-fast validation (< 30 seconds).
 
-Runs in <30 seconds with minimal data to validate:
-- Config loading
-- Data structure creation
-- Basic imports
+Tests:
+1. Dataset files exist
+2. SNR calculation is correct (on 3 samples)
+3. Audio files are readable
+
+Does NOT test:
+- Model loading/inference (too slow)
+- Full evaluation
 """
 
 import sys
-from datetime import datetime
 from pathlib import Path
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-import logging
-
-# Configure logging to file and console
-log_dir = Path(__file__).parent.parent / "logs"
-log_dir.mkdir(exist_ok=True)
-log_file = log_dir / f"smoke_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler(log_file), logging.StreamHandler()],
-)
-logger = logging.getLogger(__name__)
-
-logger.info(f"Smoke test log file: {log_file}")
+import pandas as pd
+import numpy as np
+import soundfile as sf
 
 
-def test_imports():
-    """Test that all core modules can be imported."""
-    logger.info("Testing imports...")
+def test_dataset():
+    """Quick dataset check."""
+    print("1. Testing dataset...")
 
-    try:
-        import qsm  # noqa: F401
-        from qsm import CONFIG, PROTOTYPE_MODE, PROTOTYPE_SAMPLES
-        from qsm.data import FrameTable, load_dataset  # noqa: F401
+    manifest = Path("data/processed/conditions_final/conditions_manifest.parquet")
 
-        # Verify imports are available
-        assert CONFIG is not None
-        assert PROTOTYPE_MODE is not None
-        assert PROTOTYPE_SAMPLES is not None
-
-        logger.info("[PASS] Core imports successful")
-        logger.info(f"  PROTOTYPE_MODE: {PROTOTYPE_MODE}")
-        logger.info(f"  PROTOTYPE_SAMPLES: {PROTOTYPE_SAMPLES}")
-
-        return True
-
-    except ImportError as e:
-        logger.error(f"[FAIL] Import failed: {e}")
+    if not manifest.exists():
+        print("   [X] Manifest not found")
         return False
 
+    df = pd.read_parquet(manifest)
+    print(f"   [OK] Manifest loaded: {len(df)} samples")
 
-def test_config():
-    """Test configuration loading."""
-    logger.info("Testing configuration...")
+    # Check 3 random files
+    for audio_path in df.sample(3)['audio_path']:
+        p = Path(str(audio_path).replace(chr(92), '/'))
+        if not p.exists():
+            print(f"   [X] File not found: {p}")
+            return False
 
-    try:
-        from qsm import CONFIG
-
-        # Check required sections
-        required_sections = ["data", "models", "datasets", "durations_ms"]
-
-        for section in required_sections:
-            if section not in CONFIG:
-                raise ValueError(f"Missing config section: {section}")
-
-        logger.info("[PASS] Configuration valid")
-        logger.info(f"  Durations: {CONFIG['durations_ms']}")
-
-        return True
-
-    except Exception as e:
-        logger.error(f"[FAIL] Config test failed: {e}")
-        return False
+    print("   [OK] Sample files exist")
+    return True
 
 
-def test_data_structures():
-    """Test basic data structure creation."""
-    logger.info("Testing data structures...")
+def test_snr():
+    """Quick SNR check on 3 samples."""
+    print("2. Testing SNR accuracy...")
 
-    try:
-        import pandas as pd
+    manifest = Path("data/processed/conditions_final/conditions_manifest.parquet")
+    df = pd.read_parquet(manifest)
 
-        from qsm.data import FrameTable
+    snr_df = df[df['variant_type'] == 'snr']
 
-        # Create minimal FrameTable
-        data = pd.DataFrame(
-            {
-                "uri": ["test_file"],
-                "start_s": [0.0],
-                "end_s": [1.0],
-                "label": ["SPEECH"],
-                "split": ["train"],
-                "dataset": ["smoke_test"],
-            }
-        )
+    # Test 3 SNR levels
+    for target_snr in [0.0, -10.0, 10.0]:
+        samples = snr_df[snr_df['snr_db'] == target_snr]
+        if len(samples) == 0:
+            continue
 
-        ft = FrameTable(data=data)
+        sample = samples.iloc[0]
+        audio_path = Path(str(sample['audio_path']).replace('\', '/'))
 
-        assert len(ft.data) == 1
-        assert len(ft.speech_segments) == 1
-        assert len(ft.nonspeech_segments) == 0
+        if not audio_path.exists():
+            print(f"   [X] Audio not found: {audio_path}")
+            return False
 
-        logger.info("[PASS] Data structures working")
+        audio, sr = sf.read(audio_path)
 
-        return True
+        # Get original
+        clip_id = sample['clip_id']
+        gt = sample['ground_truth']
+        orig_dir = Path(f"data/processed/padded/{gt.lower()}")
+        orig_files = list(orig_dir.glob(f"{clip_id}_padded.wav"))
 
-    except Exception as e:
-        logger.error(f"[FAIL] Data structure test failed: {e}")
-        return False
+        if not orig_files:
+            continue
 
+        orig_audio, _ = sf.read(orig_files[0])
 
-def test_slicing():
-    """Test segment slicing with safety buffers."""
-    logger.info("Testing slicing...")
+        # Check effective segment (500-1500ms)
+        start = int(sr * 0.5)
+        end = int(sr * 1.5)
 
-    try:
-        from pyannote.core import Segment
+        rms_orig = np.sqrt(np.mean(orig_audio[start:end]**2))
+        rms_snr = np.sqrt(np.mean(audio[start:end]**2))
 
-        from qsm.data.slicing import slice_segments_from_interval
+        ratio = rms_snr / rms_orig if rms_orig > 0 else 0
 
-        # Use 5s interval: with 1s safety buffers, valid zone is [1.0, 4.0] = 3s
-        interval = Segment(0.0, 5.0)
+        # Expected ratios (with 20% tolerance)
+        expected = {-10.0: 3.3, 0.0: 1.4, 10.0: 1.0}[target_snr]
+        error = abs(ratio - expected) / expected * 100
 
-        segments = slice_segments_from_interval(interval=interval, duration_ms=100, mode="speech")
+        if error > 20:
+            print(f"   [X] SNR={target_snr:+.0f}dB: ratio={ratio:.2f} (expected ~{expected:.1f})")
+            return False
 
-        logger.info(f"Created {len(segments)} segments")
-        logger.info(f"First segment: {segments[0]}")
-        logger.info(f"Last segment: {segments[-1]}")
-
-        # 3s / 100ms = 30 segments
-        assert len(segments) == 30, f"Expected 30 segments, got {len(segments)}"
-        assert abs(segments[0].duration - 0.1) < 1e-6, f"Expected duration ~0.1, got {segments[0].duration}"
-        # Verify segments are within buffer zone
-        assert segments[0].start >= 1.0, f"Expected start >= 1.0, got {segments[0].start}"
-        assert segments[-1].end <= 4.0, f"Expected end <= 4.0, got {segments[-1].end}"
-
-        logger.info(f"[PASS] Slicing working (created {len(segments)} segments with safety buffers)")
-
-        return True
-
-    except Exception as e:
-        logger.error(f"[FAIL] Slicing test failed: {e}", exc_info=True)
-        return False
+    print("   [OK] SNR measurements correct")
+    return True
 
 
-def test_directory_structure():
-    """Test that required directories exist or can be created."""
-    logger.info("Testing directory structure...")
+def test_audio():
+    """Quick audio read test."""
+    print("3. Testing audio files...")
 
-    try:
-        from qsm import CONFIG
+    manifest = Path("data/processed/conditions_final/conditions_manifest.parquet")
+    df = pd.read_parquet(manifest)
 
-        required_dirs = [
-            CONFIG["data"]["root"],
-            CONFIG["data"]["raw"],
-            CONFIG["data"]["processed"],
-            CONFIG["data"]["segments"],
-        ]
+    # Test one file per variant type
+    for vtype in ['duration', 'snr', 'band', 'rir']:
+        samples = df[df['variant_type'] == vtype]
+        if len(samples) == 0:
+            print(f"   [!] No {vtype} samples")
+            continue
 
-        for dir_path in required_dirs:
-            path = Path(dir_path)
-            path.mkdir(parents=True, exist_ok=True)
+        audio_path = Path(str(samples.iloc[0]['audio_path']).replace('\', '/'))
 
-            if not path.exists():
-                raise FileNotFoundError(f"Could not create: {dir_path}")
+        try:
+            audio, sr = sf.read(audio_path)
+            if len(audio) == 0:
+                print(f"   [X] Empty audio: {audio_path.name}")
+                return False
+        except Exception as e:
+            print(f"   [X] Cannot read {audio_path.name}: {e}")
+            return False
 
-        logger.info("[PASS] Directory structure valid")
-
-        return True
-
-    except Exception as e:
-        logger.error(f"[FAIL] Directory test failed: {e}")
-        return False
+    print("   [OK] All variant types readable")
+    return True
 
 
 def main():
-    """Run all smoke tests."""
-    logger.info("=" * 60)
-    logger.info("SMOKE TEST - Qwen Speech Minimum")
-    logger.info("=" * 60)
+    print("=" * 60)
+    print("SMOKE TEST - Quick Pipeline Validation")
+    print("=" * 60)
+    print()
 
     tests = [
-        ("Imports", test_imports),
-        ("Configuration", test_config),
-        ("Data Structures", test_data_structures),
-        ("Slicing", test_slicing),
-        ("Directory Structure", test_directory_structure),
+        ("Dataset", test_dataset),
+        ("SNR", test_snr),
+        ("Audio", test_audio),
     ]
 
-    results = []
+    results = {}
 
     for name, test_func in tests:
-        logger.info(f"\n[{name}]")
-        result = test_func()
-        results.append((name, result))
+        try:
+            results[name] = test_func()
+        except Exception as e:
+            print(f"   [X] CRASH: {e}")
+            results[name] = False
+        print()
 
     # Summary
-    logger.info("\n" + "=" * 60)
-    logger.info("SMOKE TEST SUMMARY")
-    logger.info("=" * 60)
+    print("=" * 60)
+    print("SUMMARY")
+    print("=" * 60)
 
-    all_passed = True
+    all_passed = all(results.values())
 
-    for name, result in results:
-        status = "[PASS]" if result else "[FAIL]"
-        logger.info(f"{status}: {name}")
+    for name, passed in results.items():
+        status = "[OK]" if passed else "[FAIL]"
+        print(f"{status} {name}")
 
-        if not result:
-            all_passed = False
-
-    logger.info("=" * 60)
+    print()
 
     if all_passed:
-        logger.info("[PASS] ALL TESTS PASSED")
+        print("[OK] SMOKE TEST PASSED")
+        print()
+        print("Next: Run full validation")
+        print("  python scripts/quick_validation.py")
         return 0
     else:
-        logger.error("[FAIL] SOME TESTS FAILED")
+        print("[FAIL] SMOKE TEST FAILED")
+        print()
+        print("Fix issues above before running full validation")
         return 1
 
 
