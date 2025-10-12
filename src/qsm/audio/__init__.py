@@ -8,15 +8,15 @@ Modules:
   - reverb: Reverberation (RIR convolution)
 """
 
-from .slicing import (
-    extract_segment_center,
-    pad_audio_center,
-    slice_and_pad,
-    create_duration_variants,
-)
 from .filters import apply_bandpass, apply_highpass, apply_lowpass
 from .noise import add_white_noise, mix_at_snr
 from .reverb import apply_rir, load_rir_database
+from .slicing import (
+    create_duration_variants,
+    extract_segment_center,
+    pad_audio_center,
+    slice_and_pad,
+)
 
 __all__ = [
     # Slicing/segmentation

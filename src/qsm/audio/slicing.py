@@ -5,8 +5,9 @@ Extracts segments of different durations from audio files, applying
 center extraction and padding for consistent psychoacoustic evaluation.
 """
 
-import numpy as np
 import logging
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 

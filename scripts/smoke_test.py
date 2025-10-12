@@ -59,7 +59,7 @@ def test_snr():
             continue
 
         sample = samples.iloc[0]
-        audio_path = Path(str(sample['audio_path']).replace('\', '/'))
+        audio_path = Path(str(sample['audio_path']).replace(chr(92), '/'))
 
         if not audio_path.exists():
             print(f"   [X] Audio not found: {audio_path}")
@@ -113,7 +113,7 @@ def test_audio():
             print(f"   [!] No {vtype} samples")
             continue
 
-        audio_path = Path(str(samples.iloc[0]['audio_path']).replace('\', '/'))
+        audio_path = Path(str(samples.iloc[0]['audio_path']).replace(chr(92), '/'))
 
         try:
             audio, sr = sf.read(audio_path)
