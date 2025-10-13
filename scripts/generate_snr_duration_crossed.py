@@ -28,8 +28,8 @@ from tqdm import tqdm
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from qsm.audio.duration import apply_duration_truncation
-from qsm.audio.noise import add_noise_at_snr
+from qsm.audio.slicing import extract_from_padded_1000ms, pad_audio_center
+from qsm.audio.noise import mix_at_snr
 
 
 def generate_snr_duration_crossed(
@@ -77,43 +77,46 @@ def generate_snr_duration_crossed(
 
         # Load 1000ms audio
         if not audio_path.exists():
-            print(f"Warning: File not found: {audio_path}")
+            print(f"\nWarning: File not found: {audio_path}")
             continue
 
-        audio, sr = sf.read(audio_path)
+        audio_1000ms, sr = sf.read(audio_path)
 
         # Verify sample rate
         if sr != sample_rate:
-            print(f"Warning: Expected {sample_rate}Hz, got {sr}Hz for {clip_id}")
+            print(f"\nWarning: Expected {sample_rate}Hz, got {sr}Hz for {clip_id}")
             continue
 
-        # Audio should be 1000ms (may vary slightly)
+        # Verify length (should be ~1000ms)
         expected_samples = sample_rate  # 1000ms = 16000 samples at 16kHz
-        if abs(len(audio) - expected_samples) > 100:  # Allow 100 samples tolerance
-            print(f"Warning: Expected ~1000ms ({expected_samples} samples), got {len(audio)} samples for {clip_id}")
+        if abs(len(audio_1000ms) - expected_samples) > 100:  # Allow 100 samples tolerance
             # Trim or pad to exactly 1000ms
-            if len(audio) > expected_samples:
-                audio = audio[:expected_samples]
+            if len(audio_1000ms) > expected_samples:
+                audio_1000ms = audio_1000ms[:expected_samples]
             else:
-                audio = np.pad(audio, (0, expected_samples - len(audio)), mode='constant')
+                audio_1000ms = np.pad(audio_1000ms, (0, expected_samples - len(audio_1000ms)), mode='constant')
+
+        # Pad to 2000ms (required by extract_from_padded_1000ms)
+        audio_2000ms = pad_audio_center(audio_1000ms, target_ms=2000, sr=sample_rate)
 
         # Generate all SNR×Duration combinations
         for duration_ms in durations_ms:
             for snr_db in snr_db_levels:
-                # 1. Apply duration truncation
-                audio_truncated = apply_duration_truncation(
-                    audio,
-                    target_duration_ms=duration_ms,
-                    sample_rate=sample_rate,
-                    padding_duration_ms=1000,  # Keep 1000ms container
+                # 1. Extract duration segment (from center of 2000ms container)
+                audio_segment = extract_from_padded_1000ms(
+                    audio_2000ms,
+                    duration_ms=duration_ms,
+                    sr=sample_rate
                 )
 
                 # 2. Add noise at target SNR
-                audio_noisy = add_noise_at_snr(
-                    audio_truncated,
-                    target_snr_db=snr_db,
-                    sample_rate=sample_rate,
-                    noise_type="white",
+                # mix_at_snr returns (audio_mixed, metadata_dict)
+                audio_noisy, snr_metadata = mix_at_snr(
+                    audio_segment,
+                    snr_db=snr_db,
+                    sr=sample_rate,
+                    padding_ms=2000,
+                    effective_dur_ms=duration_ms,
                     seed=np.random.randint(0, 2**31),
                 )
 
@@ -132,6 +135,9 @@ def generate_snr_duration_crossed(
                     "audio_path": str(output_path.as_posix()),
                     "ground_truth": label,
                     "dataset": row.get("dataset", "unknown"),
+                    "rms_signal": snr_metadata.get("rms_signal"),
+                    "rms_noise": snr_metadata.get("rms_noise"),
+                    "measured_snr_db": snr_metadata.get("measured_snr_db"),
                 })
 
     # Save metadata
@@ -149,6 +155,16 @@ def generate_snr_duration_crossed(
     print(f"  Conditions: {len(durations_ms)} durations × {len(snr_db_levels)} SNR = {len(durations_ms) * len(snr_db_levels)}")
     print(f"  Total samples: {len(metadata_df)}")
     print(f"  Labels: {metadata_df['ground_truth'].value_counts().to_dict()}")
+
+    # SNR accuracy check
+    print("\nSNR accuracy (measured vs target):")
+    for target_snr in sorted(snr_db_levels):
+        subset = metadata_df[metadata_df["snr_db"] == target_snr]
+        if len(subset) > 0:
+            measured_mean = subset["measured_snr_db"].mean()
+            measured_std = subset["measured_snr_db"].std()
+            error = abs(measured_mean - target_snr)
+            print(f"  Target {target_snr:+3d} dB → Measured {measured_mean:+6.2f} ± {measured_std:.2f} dB (error: {error:.2f} dB)")
 
     return metadata_df
 
