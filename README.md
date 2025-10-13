@@ -17,23 +17,24 @@ cd OPRO-Qwen
 pip install -r requirements.txt
 ```
 
-### Fast Testing (10 seconds)
+### Pipeline Validation (10 seconds)
 ```bash
-python scripts/simple_test.py
+python scripts/validate_evaluation_pipeline.py
 ```
 
-### Quick Validation (2-3 minutes)
+### Full Evaluation with Robust Metrics
 ```bash
-python scripts/quick_validation.py
+# Evaluate on dev split (15-20 min with GPU)
+python scripts/evaluate_with_robust_metrics.py --split dev
+
+# Evaluate on test split (after hyperparameters frozen)
+python scripts/evaluate_with_robust_metrics.py --split test
 ```
 
-### Full Evaluation
+### Recompute Metrics from Saved Predictions
 ```bash
-# Default: 40 clips per class (20 min)
-python scripts/debug_evaluate.py
-
-# Quick test: 2 clips per class (2 min)
-python scripts/debug_evaluate.py --n_clips 2
+# Fast re-analysis without model loading
+python scripts/recompute_metrics.py
 ```
 
 ## Current Results
@@ -74,11 +75,10 @@ OPRO-Qwen/
 │   └── debug_2clips_v2/         # SNR investigation results
 │
 ├── scripts/
-│   ├── simple_test.py           # 10s smoke test (no model)
-│   ├── quick_validation.py      # 2-3min validation (with model)
-│   ├── debug_evaluate.py        # Full evaluation (configurable)
-│   ├── analyze_snr_samples.py   # SNR verification tool
-│   └── cleanup_project.py       # Project cleanup script
+│   ├── validate_evaluation_pipeline.py  # Pipeline validation (no model)
+│   ├── evaluate_with_robust_metrics.py  # Full evaluation with robust metrics
+│   ├── recompute_metrics.py             # Re-analyze saved predictions
+│   └── create_train_test_split.py       # Create stratified dev/test split
 │
 ├── src/qsm/
 │   ├── audio/
@@ -155,13 +155,14 @@ Answer with ONLY the letter (A, B, C, or D).
 - **Optimal padding**: 2000ms containers (verified)
 - **Optimal duration**: 1000ms effective segments
 
-## Testing Levels
+## Evaluation Workflow
 
-| Test | Duration | Model | Use Case |
-|------|----------|-------|----------|
-| Smoke | 10s | No | Quick sanity check |
-| Quick | 2-3min | Yes | Pre-commit validation |
-| Full | 10-20min | Yes | Complete evaluation |
+| Script | Duration | Model | Purpose |
+|--------|----------|-------|---------|
+| `validate_evaluation_pipeline.py` | 10s | No | Validate pipeline logic |
+| `smoke_test.py` | 30s | No | CI smoke test |
+| `evaluate_with_robust_metrics.py` | 15-20min | Yes | Full evaluation with metrics |
+| `recompute_metrics.py` | 10s | No | Re-analyze saved predictions |
 
 ## Recent Changes
 

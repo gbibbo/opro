@@ -14,7 +14,7 @@ Create a stable, reproducible evaluation pipeline with robust metrics that accou
 
 ### 1. Stratified Dev/Test Split ✅
 
-**Script:** `scripts/sprint6_stratified_split.py`
+**Script:** `scripts/create_train_test_split.py`
 
 **Features:**
 - 80/20 dev/test split (70 clips dev, 17 clips test)
@@ -31,7 +31,7 @@ data/processed/conditions_final/
 
 **Usage:**
 ```bash
-python scripts/sprint6_stratified_split.py --seed 42 --test_size 0.2
+python scripts/create_train_test_split.py --seed 42 --test_size 0.2
 ```
 
 **Validation:** ✅ Split is reproducible and properly stratified
@@ -40,7 +40,7 @@ python scripts/sprint6_stratified_split.py --seed 42 --test_size 0.2
 
 ### 2. Robust Metrics ✅
 
-**Script:** `scripts/sprint6_evaluate_robust.py`
+**Script:** `scripts/evaluate_with_robust_metrics.py`
 
 **Key Metrics:**
 
@@ -73,10 +73,10 @@ python scripts/sprint6_stratified_split.py --seed 42 --test_size 0.2
 **Usage:**
 ```bash
 # Evaluate on dev split
-python scripts/sprint6_evaluate_robust.py --split dev --output_dir results/sprint6_robust
+python scripts/evaluate_with_robust_metrics.py --split dev --output_dir results/sprint6_robust
 
 # Evaluate on test split (after hyperparameters frozen)
-python scripts/sprint6_evaluate_robust.py --split test --output_dir results/sprint6_robust
+python scripts/evaluate_with_robust_metrics.py --split test --output_dir results/sprint6_robust
 ```
 
 **Output:**
@@ -106,7 +106,7 @@ results/sprint6_robust/
 
 ### 4. Pipeline Validation ✅
 
-**Script:** `scripts/sprint6_validate_pipeline.py`
+**Script:** `scripts/validate_evaluation_pipeline.py`
 
 **Tests:**
 1. ✅ Split reproducibility (same seed → same split)
@@ -116,7 +116,7 @@ results/sprint6_robust/
 
 **Usage:**
 ```bash
-python scripts/sprint6_validate_pipeline.py
+python scripts/validate_evaluation_pipeline.py
 ```
 
 **Result:** All 4 tests pass
@@ -141,7 +141,7 @@ python scripts/sprint6_validate_pipeline.py
 Run full evaluation on dev split to establish baseline:
 
 ```bash
-python scripts/sprint6_evaluate_robust.py --split dev --output_dir results/sprint6_robust
+python scripts/evaluate_with_robust_metrics.py --split dev --output_dir results/sprint6_robust
 ```
 
 **Expected runtime:** ~15-20 minutes (model loading + 1400 variant inferences)
@@ -167,9 +167,9 @@ With `dev_predictions.parquet` from Sprint 6:
 
 ```
 scripts/
-├── sprint6_stratified_split.py      # Create reproducible dev/test split
-├── sprint6_evaluate_robust.py       # Robust evaluation with clip grouping
-└── sprint6_validate_pipeline.py     # Validation tests (no model loading)
+├── create_train_test_split.py      # Create reproducible dev/test split
+├── evaluate_with_robust_metrics.py       # Robust evaluation with clip grouping
+└── validate_evaluation_pipeline.py     # Validation tests (no model loading)
 
 data/processed/conditions_final/
 ├── conditions_manifest_split.parquet         # Manifest with 'split' column
@@ -242,7 +242,7 @@ TEST 4: Output Structure ..................... [OK] PASSED
 RESULT: ALL TESTS PASSED
 
 Next: Run full evaluation on dev split
-  python scripts/sprint6_evaluate_robust.py --split dev
+  python scripts/evaluate_with_robust_metrics.py --split dev
 ```
 
 ---

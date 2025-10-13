@@ -94,18 +94,18 @@ T60_0.8-1.5: 95.8%
 
 ## Files Changed
 
-1. **`scripts/sprint6_evaluate_robust.py`**:
+1. **`scripts/evaluate_with_robust_metrics.py`**:
    - Fixed `compute_condition_metrics()` to use variant-level directly
    - Updated docstrings to clarify variant-level vs clip-level
 
-2. **`scripts/sprint6_reanalyze_results.py`** (NEW):
+2. **`scripts/recompute_metrics.py`** (NEW):
    - Re-analyzes saved predictions without re-running model
    - Useful for quick iteration on metric computation
 
 ## Validation
 
 ```bash
-python scripts/sprint6_reanalyze_results.py
+python scripts/recompute_metrics.py
 ```
 
 **Output**:
