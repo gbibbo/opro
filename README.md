@@ -37,6 +37,17 @@ python scripts/evaluate_with_robust_metrics.py --split test
 python scripts/recompute_metrics.py
 ```
 
+### Fit Psychometric Curves
+```bash
+# Fit logistic curves and extract thresholds
+python scripts/fit_psychometric_curves.py --n_bootstrap 1000
+
+# Output: results/psychometric_curves/
+#   - psychometric_results.json
+#   - duration_curve.png
+#   - snr_curve.png
+```
+
 ## Current Results
 
 **Overall Performance: 96.25% (77/80 correct)**
@@ -47,6 +58,18 @@ python scripts/recompute_metrics.py
 | SNR       | 91.7%    | 2 errors at high noise levels |
 | Band-limiting | 100.0% | Perfect performance |
 | Reverb (RIR) | 100.0% | Perfect performance |
+
+### Psychometric Thresholds
+
+**Duration Thresholds (Sprint 7):**
+- **DT50**: 20.0 ms (CI95: [20.0, 20.0]) - Duration at 50% accuracy
+- **DT75**: 39.8 ms (CI95: [29.9, 49.7]) - Duration at 75% accuracy
+- **R² = 0.505** (moderate fit, monotonically increasing)
+
+**SNR Thresholds (Sprint 7 - Under Investigation):**
+- SNR-50: -10.0 dB (R² = -1.66, non-monotonic pattern detected)
+- Status: Needs investigation - likely clip-specific effects or model artifacts
+- See [SPRINT7_SUMMARY.md](SPRINT7_SUMMARY.md) for details
 
 ### Dataset Statistics
 - **Total clips**: 87 (40 SPEECH + 47 NONSPEECH)
@@ -72,13 +95,15 @@ OPRO-Qwen/
 │
 ├── results/
 │   ├── test_final/              # Latest evaluation results
-│   └── debug_2clips_v2/         # SNR investigation results
+│   ├── debug_2clips_v2/         # SNR investigation results
+│   └── psychometric_curves/     # Psychometric curves and thresholds
 │
 ├── scripts/
 │   ├── validate_evaluation_pipeline.py  # Pipeline validation (no model)
 │   ├── evaluate_with_robust_metrics.py  # Full evaluation with robust metrics
 │   ├── recompute_metrics.py             # Re-analyze saved predictions
-│   └── create_train_test_split.py       # Create stratified dev/test split
+│   ├── create_train_test_split.py       # Create stratified dev/test split
+│   └── fit_psychometric_curves.py       # Psychometric curve fitting
 │
 ├── src/qsm/
 │   ├── audio/
@@ -97,7 +122,10 @@ OPRO-Qwen/
 
 ## Documentation
 
+- **[Sprint 6 Summary](SPRINT6_SUMMARY.md)** - Robust evaluation pipeline with stratified split
+- **[Sprint 7 Summary](SPRINT7_SUMMARY.md)** - Psychometric curves and thresholds
 - **[SNR Investigation Report](HALLAZGOS_SNR_INVESTIGATION.md)** - Complete technical analysis of SNR generation and validation
+- **[Evaluation Guide](EVALUATION_GUIDE.md)** - Complete workflow for running evaluations
 - **[Project Structure](PROJECT_STRUCTURE.md)** - Detailed organization after cleanup
 - **[Testing Guide](TESTING_GUIDE.md)** - How to run different test levels
 - **[Cleanup Summary](CLEANUP_SUMMARY.txt)** - What was cleaned and why (1.27 GB freed)
@@ -165,6 +193,21 @@ Answer with ONLY the letter (A, B, C, or D).
 | `recompute_metrics.py` | 10s | No | Re-analyze saved predictions |
 
 ## Recent Changes
+
+### Sprint 7 (Partial Completion)
+- ✅ Psychometric curve fitting with logistic functions
+- ✅ Duration thresholds: DT50=20ms, DT75=40ms (R²=0.505)
+- ✅ Bootstrap confidence intervals (clustered by clip_id)
+- ⚠️ SNR curves computed but non-monotonic (R²=-1.66, needs investigation)
+- ✅ Paper-ready figures (PNG, 300 DPI)
+
+### Sprint 6 Completion
+- ✅ Stratified dev/test split (80/20) with reproducibility
+- ✅ Clip-level aggregation (majority vote across 20 variants)
+- ✅ Robust metrics (Balanced Accuracy, Macro-F1)
+- ✅ Condition-specific analysis corrected
+- ✅ All scripts renamed to functional names
+- ✅ Repository cleanup (12 debug/test scripts removed)
 
 ### Sprint 5 Completion
 - ✅ Psychoacoustic condition generators (SNR, band-limiting, reverb)
