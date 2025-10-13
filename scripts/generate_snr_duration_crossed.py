@@ -230,7 +230,7 @@ def generate_snr_duration_crossed(
             measured_mean = subset["measured_snr_db"].mean()
             measured_std = subset["measured_snr_db"].std()
             error = abs(measured_mean - target_snr)
-            print(f"  Target {target_snr:+3d} dB → Measured {measured_mean:+6.2f} ± {measured_std:.2f} dB (error: {error:.2f} dB)")
+            print(f"  Target {target_snr:+3d} dB -> Measured {measured_mean:+6.2f} +/- {measured_std:.2f} dB (error: {error:.2f} dB)")
 
     return metadata_df
 
