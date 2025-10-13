@@ -68,11 +68,12 @@ python scripts/fit_psychometric_curves.py --n_bootstrap 1000
 - **Tjur R² = 0.056** (discrimination index)
 - Model requires ~35ms to reach 75% accuracy
 
-**SNR Thresholds (Sprint 7 - Under Investigation):**
-- **SNR-75**: -4.9 dB (CI95: [-10.0, 2.5]) - **PRIMARY METRIC**
+**SNR Thresholds (Sprint 7 - Incomplete, needs Sprint 8):**
+- **SNR-75**: -4.9 dB (CI95: [-10.0, 2.5]) - Collapsed across all durations
 - **McFadden R² = 0.018** (poor fit, non-monotonic pattern)
-- Status: Duration mixing effect - needs GLM/GLMM with SNR×Duration interaction
-- See [SPRINT7_REVISED_SUMMARY.md](SPRINT7_REVISED_SUMMARY.md) for methodology
+- **Root cause identified**: All SNR variants have duration_ms=1000 (no factorial design)
+- **Solution**: Sprint 8 will generate factorial SNR×Duration dataset (4×8 conditions)
+- See [SPRINT8_SPECIFICATION.md](SPRINT8_SPECIFICATION.md) for roadmap
 
 ### Dataset Statistics
 - **Total clips**: 87 (40 SPEECH + 47 NONSPEECH)
@@ -127,6 +128,7 @@ OPRO-Qwen/
 
 - **[Sprint 6 Summary](SPRINT6_SUMMARY.md)** - Robust evaluation pipeline with stratified split
 - **[Sprint 7 Revised Summary](SPRINT7_REVISED_SUMMARY.md)** - MLE psychometric curves with pseudo-R²
+- **[Sprint 8 Specification](SPRINT8_SPECIFICATION.md)** - Factorial SNR×Duration design for stratified analysis
 - **[SNR Investigation Report](HALLAZGOS_SNR_INVESTIGATION.md)** - Complete technical analysis of SNR generation and validation
 - **[Evaluation Guide](EVALUATION_GUIDE.md)** - Complete workflow for running evaluations
 - **[Project Structure](PROJECT_STRUCTURE.md)** - Detailed organization after cleanup
@@ -197,13 +199,14 @@ Answer with ONLY the letter (A, B, C, or D).
 
 ## Recent Changes
 
-### Sprint 7 (Revised with MLE Fitting)
+### Sprint 7 (Revised with MLE Fitting - PARTIAL)
 - ✅ MLE binomial fitting (Wichmann & Hill 2001)
 - ✅ Fixed gamma=0.5, free lapse parameter [0, 0.1]
 - ✅ Pseudo-R² metrics (McFadden & Tjur)
-- ✅ Duration curves: DT75=35ms [20, 64], McFadden R²=0.063 (COMPLETE)
-- ⚠️ SNR curves: SNR-75=-5dB, McFadden R²=0.018 (non-monotonic, needs GLM)
-- ✅ Paper-ready figures with log-scale x-axis (PNG, 300 DPI)
+- ✅ Duration curves: DT75=35ms [20, 64], McFadden R²=0.063 (PAPER-READY)
+- ⚠️ SNR curves: SNR-75=-5dB, McFadden R²=0.018 (non-monotonic)
+- 🔧 **Root cause identified**: No factorial design (all SNR variants are 1000ms)
+- 📋 **Next**: Sprint 8 factorial SNR×Duration dataset (4 durations × 8 SNR levels)
 
 ### Sprint 6 Completion
 - ✅ Stratified dev/test split (80/20) with reproducibility
