@@ -29,6 +29,10 @@ accelerate>=0.27.0
 scikit-learn>=1.4.0
 scipy>=1.12.0
 
+# OPRO (Sprint 9)
+anthropic>=0.69.0
+openai>=2.0.0
+
 # Visualization
 matplotlib>=3.8.0
 
