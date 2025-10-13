@@ -127,82 +127,84 @@ def compute_robust_metrics(
 
 def compute_condition_metrics(
     predictions_df: pd.DataFrame,
-    manifest_df: pd.DataFrame,
+    clip_agg_df: pd.DataFrame,
 ) -> Dict[str, Dict[str, float]]:
     """
-    Compute metrics per psychoacoustic condition.
+    Compute metrics per psychoacoustic condition using VARIANT-LEVEL analysis.
+
+    CRITICAL: For condition-specific metrics, we want to know:
+    "How accurate is the model on duration=20ms variants?"
+
+    This is DIFFERENT from clip-level aggregation. Each clip only has
+    ONE variant per condition (e.g., one 20ms variant), so we evaluate
+    at the VARIANT level for condition analysis.
+
+    The clip-level aggregation is for OVERALL metrics (across all conditions).
 
     Args:
-        predictions_df: Variant-level predictions (already has condition metadata)
-        manifest_df: Manifest (not used, kept for API compatibility)
+        predictions_df: Variant-level predictions with condition metadata
+        clip_agg_df: Clip-level aggregation (not used for conditions, kept for API)
 
     Returns:
-        Dictionary of metrics by condition
+        Dictionary of metrics by condition (VARIANT-LEVEL)
     """
-    print("\nComputing metrics by condition...")
+    print("\nComputing metrics by condition (VARIANT-LEVEL)...")
 
     condition_metrics = {}
 
-    # Metrics by duration
+    # Metrics by duration (VARIANT-LEVEL)
     duration_df = predictions_df[predictions_df["variant_type"] == "duration"]
     if len(duration_df) > 0:
         for dur in sorted(duration_df["duration_ms"].unique()):
             dur_subset = duration_df[duration_df["duration_ms"] == dur]
 
-            # Aggregate by clip first
-            clip_agg = aggregate_by_clip(dur_subset)
-
+            # Each clip has exactly 1 variant at this duration
+            # So variant-level = per-clip for this condition
             metrics = compute_robust_metrics(
-                clip_agg["y_true"].values,
-                clip_agg["y_pred"].values,
+                dur_subset["y_true"].values,
+                dur_subset["y_pred"].values,
                 prefix="",
             )
 
             condition_metrics[f"duration_{int(dur)}ms"] = metrics
 
-    # Metrics by SNR
+    # Metrics by SNR (VARIANT-LEVEL)
     snr_df = predictions_df[predictions_df["variant_type"] == "snr"]
     if len(snr_df) > 0:
         for snr in sorted(snr_df["snr_db"].dropna().unique()):
             snr_subset = snr_df[snr_df["snr_db"] == snr]
 
-            clip_agg = aggregate_by_clip(snr_subset)
-
             metrics = compute_robust_metrics(
-                clip_agg["y_true"].values,
-                clip_agg["y_pred"].values,
+                snr_subset["y_true"].values,
+                snr_subset["y_pred"].values,
                 prefix="",
             )
 
             condition_metrics[f"snr_{int(snr):+d}dB"] = metrics
 
-    # Metrics by band filter
+    # Metrics by band filter (VARIANT-LEVEL)
     band_df = predictions_df[predictions_df["variant_type"] == "band"]
     if len(band_df) > 0:
         for band in band_df["band_filter"].unique():
             band_subset = band_df[band_df["band_filter"] == band]
 
-            clip_agg = aggregate_by_clip(band_subset)
-
             metrics = compute_robust_metrics(
-                clip_agg["y_true"].values,
-                clip_agg["y_pred"].values,
+                band_subset["y_true"].values,
+                band_subset["y_pred"].values,
                 prefix="",
             )
 
             condition_metrics[f"band_{band}"] = metrics
 
-    # Metrics by T60
+    # Metrics by T60 (VARIANT-LEVEL)
     rir_df = predictions_df[predictions_df["variant_type"] == "rir"]
     if len(rir_df) > 0:
         for t60 in rir_df["T60_bin"].unique():
             t60_subset = rir_df[rir_df["T60_bin"] == t60]
 
-            clip_agg = aggregate_by_clip(t60_subset)
-
             metrics = compute_robust_metrics(
-                clip_agg["y_true"].values,
-                clip_agg["y_pred"].values,
+                t60_subset["y_true"].values,
+                t60_subset["y_pred"].values,
                 prefix="",
             )
 
@@ -287,8 +289,8 @@ def evaluate_on_split(
         prefix="clip_",
     )
 
-    # 3. Condition-specific metrics
-    condition_metrics = compute_condition_metrics(predictions_df, manifest_df)
+    # 3. Condition-specific metrics (VARIANT-LEVEL)
+    condition_metrics = compute_condition_metrics(predictions_df, clip_agg)
 
     # 4. Compute macro average across conditions
     # (Primary objective metric)
