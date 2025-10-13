@@ -42,7 +42,8 @@
       "Bash(cat:*)",
       "Bash(black:*)",
       "Bash(git mv:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(git tag:*)"
     ],
     "deny": [],
     "ask": []
