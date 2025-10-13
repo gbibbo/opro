@@ -167,11 +167,27 @@ coverage.xml
 # RIR dataset (large: 60,000+ files, ~8GB from OpenSLR SLR28)
 data/external/
 
-# Evaluation results directory (generated outputs)
+# Evaluation results directory (most outputs, but keep critical files)
 results/
+# BUT keep baseline results
+!results/sprint6_robust/*.parquet
+!results/sprint6_robust/*.csv
+!results/psychometric_curves/*.json
+!results/psychometric_curves/*.png
+!results/sprint8_factorial/*.parquet
+!results/sprint8_factorial/*.json
+!results/sprint8_stratified/*.json
+!results/sprint8_stratified/*.png
+!results/sprint8_glmm/*.json
+!results/sprint8_glmm/*.png
+!results/test_set_final/*.parquet
+!results/test_set_final/duration_curves/*.json
 
 # Scratch/temporary documentation
 docs/scratch/
+
+# Archived documentation (historical, not critical)
+docs/archive/
 
 # Windows error files
 nul
