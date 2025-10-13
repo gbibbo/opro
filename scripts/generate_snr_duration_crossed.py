@@ -28,7 +28,7 @@ from tqdm import tqdm
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from qsm.audio.slicing import extract_from_padded_1000ms, pad_audio_center
+from qsm.audio.slicing import slice_and_pad
 from qsm.audio.noise import mix_at_snr
 
 
@@ -96,23 +96,25 @@ def generate_snr_duration_crossed(
             else:
                 audio_1000ms = np.pad(audio_1000ms, (0, expected_samples - len(audio_1000ms)), mode='constant')
 
-        # Pad to 2000ms (required by extract_from_padded_1000ms)
-        audio_2000ms = pad_audio_center(audio_1000ms, target_duration_ms=2000, sr=sample_rate)
-
         # Generate all SNR×Duration combinations
         for duration_ms in durations_ms:
             for snr_db in snr_db_levels:
-                # 1. Extract duration segment (from center of 2000ms container)
-                audio_segment = extract_from_padded_1000ms(
-                    audio_2000ms,
+                # 1. Create duration segment in 2000ms container
+                #    slice_and_pad: extracts duration_ms from center of 1000ms audio
+                #    and places it in 2000ms container with low-amplitude noise padding
+                audio_container = slice_and_pad(
+                    audio_1000ms,
                     duration_ms=duration_ms,
-                    sr=sample_rate
+                    padding_ms=2000,
+                    sr=sample_rate,
+                    seed=np.random.randint(0, 2**31),
                 )
 
-                # 2. Add noise at target SNR
-                # mix_at_snr returns (audio_mixed, metadata_dict)
+                # 2. Add noise at target SNR to entire container
+                #    mix_at_snr computes SNR relative to effective_dur_ms region
+                #    but adds noise to entire 2000ms container
                 audio_noisy, snr_metadata = mix_at_snr(
-                    audio_segment,
+                    audio_container,
                     snr_db=snr_db,
                     sr=sample_rate,
                     padding_ms=2000,
