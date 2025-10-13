@@ -59,17 +59,20 @@ python scripts/fit_psychometric_curves.py --n_bootstrap 1000
 | Band-limiting | 100.0% | Perfect performance |
 | Reverb (RIR) | 100.0% | Perfect performance |
 
-### Psychometric Thresholds
+### Psychometric Thresholds (MLE Binomial Fitting)
 
-**Duration Thresholds (Sprint 7):**
-- **DT50**: 20.0 ms (CI95: [20.0, 20.0]) - Duration at 50% accuracy
-- **DT75**: 39.8 ms (CI95: [29.9, 49.7]) - Duration at 75% accuracy
-- **R² = 0.505** (moderate fit, monotonically increasing)
+**Duration Thresholds (Sprint 7 Revised):**
+- **DT75**: 34.8 ms (CI95: [20.0, 64.3]) - **PRIMARY METRIC**
+- **DT50**: 26.8 ms (CI95: [20.0, 45.9])
+- **McFadden R² = 0.063** (moderate fit, monotonically increasing)
+- **Tjur R² = 0.056** (discrimination index)
+- Model requires ~35ms to reach 75% accuracy
 
 **SNR Thresholds (Sprint 7 - Under Investigation):**
-- SNR-50: -10.0 dB (R² = -1.66, non-monotonic pattern detected)
-- Status: Needs investigation - likely clip-specific effects or model artifacts
-- See [SPRINT7_SUMMARY.md](SPRINT7_SUMMARY.md) for details
+- **SNR-75**: -4.9 dB (CI95: [-10.0, 2.5]) - **PRIMARY METRIC**
+- **McFadden R² = 0.018** (poor fit, non-monotonic pattern)
+- Status: Duration mixing effect - needs GLM/GLMM with SNR×Duration interaction
+- See [SPRINT7_REVISED_SUMMARY.md](SPRINT7_REVISED_SUMMARY.md) for methodology
 
 ### Dataset Statistics
 - **Total clips**: 87 (40 SPEECH + 47 NONSPEECH)
@@ -123,7 +126,7 @@ OPRO-Qwen/
 ## Documentation
 
 - **[Sprint 6 Summary](SPRINT6_SUMMARY.md)** - Robust evaluation pipeline with stratified split
-- **[Sprint 7 Summary](SPRINT7_SUMMARY.md)** - Psychometric curves and thresholds
+- **[Sprint 7 Revised Summary](SPRINT7_REVISED_SUMMARY.md)** - MLE psychometric curves with pseudo-R²
 - **[SNR Investigation Report](HALLAZGOS_SNR_INVESTIGATION.md)** - Complete technical analysis of SNR generation and validation
 - **[Evaluation Guide](EVALUATION_GUIDE.md)** - Complete workflow for running evaluations
 - **[Project Structure](PROJECT_STRUCTURE.md)** - Detailed organization after cleanup
@@ -194,12 +197,13 @@ Answer with ONLY the letter (A, B, C, or D).
 
 ## Recent Changes
 
-### Sprint 7 (Partial Completion)
-- ✅ Psychometric curve fitting with logistic functions
-- ✅ Duration thresholds: DT50=20ms, DT75=40ms (R²=0.505)
-- ✅ Bootstrap confidence intervals (clustered by clip_id)
-- ⚠️ SNR curves computed but non-monotonic (R²=-1.66, needs investigation)
-- ✅ Paper-ready figures (PNG, 300 DPI)
+### Sprint 7 (Revised with MLE Fitting)
+- ✅ MLE binomial fitting (Wichmann & Hill 2001)
+- ✅ Fixed gamma=0.5, free lapse parameter [0, 0.1]
+- ✅ Pseudo-R² metrics (McFadden & Tjur)
+- ✅ Duration curves: DT75=35ms [20, 64], McFadden R²=0.063 (COMPLETE)
+- ⚠️ SNR curves: SNR-75=-5dB, McFadden R²=0.018 (non-monotonic, needs GLM)
+- ✅ Paper-ready figures with log-scale x-axis (PNG, 300 DPI)
 
 ### Sprint 6 Completion
 - ✅ Stratified dev/test split (80/20) with reproducibility
