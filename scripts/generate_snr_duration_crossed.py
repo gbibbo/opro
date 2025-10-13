@@ -99,43 +99,99 @@ def generate_snr_duration_crossed(
         # Generate all SNR×Duration combinations
         for duration_ms in durations_ms:
             for snr_db in snr_db_levels:
-                # 1. Create duration segment in 2000ms container
-                #    slice_and_pad: extracts duration_ms from center of 1000ms audio
-                #    and places it in 2000ms container with low-amplitude noise padding
-                audio_container = slice_and_pad(
-                    audio_1000ms,
-                    duration_ms=duration_ms,
-                    padding_ms=2000,
-                    sr=sample_rate,
-                    seed=np.random.randint(0, 2**31),
-                )
+                # Strategy depends on ground truth label:
+                # - SPEECH: Apply SNR (signal + noise)
+                # - NON-SPEECH: Generate noise-only with paired RMS
 
-                # 2. Add noise at target SNR to entire container
-                #    mix_at_snr computes SNR relative to effective_dur_ms region
-                #    but adds noise to entire 2000ms container
-                audio_noisy, snr_metadata = mix_at_snr(
-                    audio_container,
-                    snr_db=snr_db,
-                    sr=sample_rate,
-                    padding_ms=2000,
-                    effective_dur_ms=duration_ms,
-                    seed=np.random.randint(0, 2**31),
-                )
+                if label == "SPEECH":
+                    # 1. Create duration segment in 2000ms container
+                    #    slice_and_pad: extracts duration_ms from center of 1000ms audio
+                    #    and places it in 2000ms container with low-amplitude noise padding
+                    audio_container = slice_and_pad(
+                        audio_1000ms,
+                        duration_ms=duration_ms,
+                        padding_ms=2000,
+                        sr=sample_rate,
+                        seed=np.random.randint(0, 2**31),
+                    )
+
+                    # 2. Add noise at target SNR to entire container
+                    #    mix_at_snr computes SNR relative to effective_dur_ms region
+                    #    but adds noise to entire 2000ms container
+                    audio_final, snr_metadata = mix_at_snr(
+                        audio_container,
+                        snr_db=snr_db,
+                        sr=sample_rate,
+                        padding_ms=2000,
+                        effective_dur_ms=duration_ms,
+                        seed=np.random.randint(0, 2**31),
+                    )
+
+                    # Calculate measured SNR from RMS values
+                    rms_signal = snr_metadata.get("rms_signal")
+                    rms_noise = snr_metadata.get("rms_noise")
+                    if rms_signal is not None and rms_noise is not None and rms_noise > 0:
+                        measured_snr_db = 20 * np.log10(rms_signal / rms_noise)
+                    else:
+                        measured_snr_db = None
+
+                else:  # NON-SPEECH
+                    # Generate noise-only with matched RMS to SPEECH conditions
+                    # This creates paired negatives: same noise level, no signal
+
+                    # For NON-SPEECH, we need to compute what the noise RMS would be
+                    # if we had a SPEECH signal at this SNR level.
+                    # We'll use a reference RMS based on typical speech amplitude.
+
+                    # Use the actual audio's RMS as reference (even though it's non-speech)
+                    # to maintain consistent noise levels across the dataset
+                    audio_container = slice_and_pad(
+                        audio_1000ms,
+                        duration_ms=duration_ms,
+                        padding_ms=2000,
+                        sr=sample_rate,
+                        seed=np.random.randint(0, 2**31),
+                    )
+
+                    # Extract effective segment to compute reference RMS
+                    total_samples = len(audio_container)
+                    effective_samples = int(sample_rate * duration_ms / 1000.0)
+                    effective_start = (total_samples - effective_samples) // 2
+                    effective_end = effective_start + effective_samples
+                    effective_segment = audio_container[effective_start:effective_end]
+
+                    # Compute RMS of the effective segment (this is our "reference signal")
+                    rms_signal = np.sqrt(np.mean(effective_segment**2))
+
+                    # Compute target noise RMS based on SNR formula
+                    # SNR_dB = 20*log10(RMS_signal / RMS_noise)
+                    # => RMS_noise = RMS_signal / 10^(SNR_dB/20)
+                    if rms_signal > 1e-8:
+                        target_rms_noise = rms_signal / (10 ** (snr_db / 20.0))
+                    else:
+                        target_rms_noise = 1e-4  # Minimal noise for silent segments
+
+                    # Generate white noise for entire container
+                    rng = np.random.default_rng(np.random.randint(0, 2**31))
+                    noise = rng.standard_normal(len(audio_container)).astype(np.float32)
+
+                    # Scale noise to target RMS
+                    current_rms_noise = np.sqrt(np.mean(noise**2))
+                    noise = noise * (target_rms_noise / current_rms_noise)
+
+                    # Final audio is noise-only (no signal)
+                    audio_final = noise
+
+                    # Store metadata (for NON-SPEECH, measured_snr_db is not meaningful)
+                    rms_noise = target_rms_noise
+                    measured_snr_db = None  # N/A for noise-only
 
                 # 3. Save
                 variant_name = f"dur{duration_ms}ms_snr{snr_db:+d}dB"
                 output_path = output_dir / f"{clip_id}_{variant_name}.wav"
-                sf.write(output_path, audio_noisy, sample_rate)
+                sf.write(output_path, audio_final, sample_rate)
 
                 # 4. Store metadata
-                # Calculate measured SNR from RMS values
-                rms_signal = snr_metadata.get("rms_signal")
-                rms_noise = snr_metadata.get("rms_noise")
-                if rms_signal is not None and rms_noise is not None and rms_noise > 0:
-                    measured_snr_db = 20 * np.log10(rms_signal / rms_noise)
-                else:
-                    measured_snr_db = None
-
                 all_metadata.append({
                     "clip_id": clip_id,
                     "variant_name": variant_name,
@@ -184,7 +240,7 @@ def main():
     parser.add_argument(
         "--input_file",
         type=Path,
-        default=Path("data/processed/subset_20clips_for_crossed.csv"),
+        default=Path("data/processed/subset_20clips_balanced.csv"),
         help="Path to CSV/parquet with clip metadata (must have: clip_id, audio_path, ground_truth)",
     )
     parser.add_argument(

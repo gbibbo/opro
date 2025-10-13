@@ -59,6 +59,38 @@ def evaluate_factorial_dataset(
     # Normalize ground truth labels
     metadata_df["ground_truth"] = metadata_df["ground_truth"].str.replace("-", "").str.replace("_", "").str.upper()
 
+    # Sanity check: Verify balanced distribution per condition
+    print("\nSanity check: Verifying 50/50 balance per condition...")
+    durations = sorted(metadata_df['duration_ms'].unique())
+    snr_levels = sorted(metadata_df['snr_db'].unique())
+
+    all_balanced = True
+    for dur in durations:
+        for snr in snr_levels:
+            cond_df = metadata_df[
+                (metadata_df['duration_ms'] == dur) & (metadata_df['snr_db'] == snr)
+            ]
+            label_counts = cond_df['ground_truth'].value_counts()
+
+            if len(label_counts) < 2:
+                print(f"  ❌ FAIL: dur={dur}ms, snr={snr:+d}dB has only {label_counts.to_dict()}")
+                all_balanced = False
+            else:
+                speech_count = label_counts.get("SPEECH", 0)
+                nonspeech_count = label_counts.get("NONSPEECH", 0)
+                if speech_count != nonspeech_count:
+                    print(f"  ⚠️  WARN: dur={dur}ms, snr={snr:+d}dB is imbalanced: SPEECH={speech_count}, NONSPEECH={nonspeech_count}")
+                    all_balanced = False
+
+    if all_balanced:
+        print("  ✅ All conditions are balanced (50/50 SPEECH/NONSPEECH)")
+    else:
+        raise ValueError(
+            "Dataset is not balanced per condition. "
+            "Each (duration, SNR) condition must have equal SPEECH and NONSPEECH samples. "
+            "Please regenerate the dataset with balanced composition."
+        )
+
     # Run predictions
     predictions = []
 

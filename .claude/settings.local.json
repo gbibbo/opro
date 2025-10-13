@@ -40,7 +40,9 @@
       "Bash(python:*)",
       "Bash(timeout:*)",
       "Bash(cat:*)",
-      "Bash(black:*)"
+      "Bash(black:*)",
+      "Bash(git mv:*)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": []
