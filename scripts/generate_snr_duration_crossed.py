@@ -128,6 +128,14 @@ def generate_snr_duration_crossed(
                 sf.write(output_path, audio_noisy, sample_rate)
 
                 # 4. Store metadata
+                # Calculate measured SNR from RMS values
+                rms_signal = snr_metadata.get("rms_signal")
+                rms_noise = snr_metadata.get("rms_noise")
+                if rms_signal is not None and rms_noise is not None and rms_noise > 0:
+                    measured_snr_db = 20 * np.log10(rms_signal / rms_noise)
+                else:
+                    measured_snr_db = None
+
                 all_metadata.append({
                     "clip_id": clip_id,
                     "variant_name": variant_name,
@@ -137,9 +145,9 @@ def generate_snr_duration_crossed(
                     "audio_path": str(output_path.as_posix()),
                     "ground_truth": label,
                     "dataset": row.get("dataset", "unknown"),
-                    "rms_signal": snr_metadata.get("rms_signal"),
-                    "rms_noise": snr_metadata.get("rms_noise"),
-                    "measured_snr_db": snr_metadata.get("measured_snr_db"),
+                    "rms_signal": rms_signal,
+                    "rms_noise": rms_noise,
+                    "measured_snr_db": measured_snr_db,
                 })
 
     # Save metadata
