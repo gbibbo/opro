@@ -97,7 +97,7 @@ def generate_snr_duration_crossed(
                 audio_1000ms = np.pad(audio_1000ms, (0, expected_samples - len(audio_1000ms)), mode='constant')
 
         # Pad to 2000ms (required by extract_from_padded_1000ms)
-        audio_2000ms = pad_audio_center(audio_1000ms, target_ms=2000, sr=sample_rate)
+        audio_2000ms = pad_audio_center(audio_1000ms, target_duration_ms=2000, sr=sample_rate)
 
         # Generate all SNR×Duration combinations
         for duration_ms in durations_ms:
