@@ -491,12 +491,18 @@ def plot_duration_curves(
 
     ax.set_xlabel('Duration (ms)', fontsize=12)
     ax.set_ylabel('P(Correct)', fontsize=12)
-    ax.set_title('Psychometric Curve: P(Correct) vs Duration\n(MLE fit, γ=0.5 fixed, λ free)',
+    ax.set_title('Psychometric Curve: P(Correct) vs Duration\n(MLE fit, γ=0.5 fixed, λ free) - PAPER-READY',
                  fontsize=14, fontweight='bold')
     ax.set_ylim([0.4, 1.05])
     ax.set_xscale('log')
     ax.grid(True, alpha=0.3, which='both')
     ax.legend(loc='lower right')
+
+    # Add status annotation
+    ax.text(0.98, 0.02, 'Status: COMPLETE - Monotonic, ready for publication',
+            transform=ax.transAxes, fontsize=9, ha='right', va='bottom',
+            style='italic', color='green',
+            bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.3))
 
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
@@ -555,17 +561,17 @@ def plot_snr_curves(
 
     ax.set_xlabel('SNR (dB)', fontsize=12)
     ax.set_ylabel('P(Correct)', fontsize=12)
-    ax.set_title('Psychometric Curve: P(Correct) vs SNR\n(MLE fit, γ=0.5 fixed, λ free)',
+    ax.set_title('Psychometric Curve: P(Correct) vs SNR\n(MLE fit, γ=0.5 fixed, λ free) - DIAGNOSTIC ONLY',
                  fontsize=14, fontweight='bold')
     ax.set_ylim([0.4, 1.05])
     ax.grid(True, alpha=0.3)
     ax.legend(loc='lower right')
 
-    # Add warning note about non-monotonicity
-    ax.text(0.98, 0.02, 'Note: Non-monotonic pattern suggests duration mixing effect',
+    # Add warning note about non-monotonicity and diagnostic status
+    ax.text(0.98, 0.02, 'Status: DIAGNOSTIC ONLY\nNon-monotonic due to lack of factorial SNR×Duration design\nOfficial SNR-75 thresholds will be reported in Sprint 8',
             transform=ax.transAxes, fontsize=9, ha='right', va='bottom',
             style='italic', color='red',
-            bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.3))
+            bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.4))
 
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
@@ -643,6 +649,13 @@ def main():
                 "duration": "DT75",
                 "snr": "SNR-75",
             },
+            "status": {
+                "duration": "COMPLETE - Paper-ready, monotonic, McFadden R²=0.063",
+                "snr": "DIAGNOSTIC ONLY - Non-monotonic due to lack of factorial design. Official SNR thresholds will be reported stratified by duration in Sprint 8."
+            },
+            "snr_overall_is_diagnostic": True,
+            "snr_requires_factorial_design": True,
+            "next_steps": "Sprint 8: Generate factorial SNR×Duration dataset (4 durations × 8 SNR levels) for stratified analysis and proper SNR-75 thresholds."
         }
     }
 

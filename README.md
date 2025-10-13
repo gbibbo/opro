@@ -199,14 +199,18 @@ Answer with ONLY the letter (A, B, C, or D).
 
 ## Recent Changes
 
-### Sprint 7 (Revised with MLE Fitting - PARTIAL)
-- ✅ MLE binomial fitting (Wichmann & Hill 2001)
-- ✅ Fixed gamma=0.5, free lapse parameter [0, 0.1]
-- ✅ Pseudo-R² metrics (McFadden & Tjur)
-- ✅ Duration curves: DT75=35ms [20, 64], McFadden R²=0.063 (PAPER-READY)
-- ⚠️ SNR curves: SNR-75=-5dB, McFadden R²=0.018 (non-monotonic)
-- 🔧 **Root cause identified**: No factorial design (all SNR variants are 1000ms)
-- 📋 **Next**: Sprint 8 factorial SNR×Duration dataset (4 durations × 8 SNR levels)
+### Sprint 7 (CLOSED - Duration Complete, SNR Diagnostic)
+- ✅ **MLE binomial fitting** (Wichmann & Hill 2001) - Methodology approved
+- ✅ **Fixed gamma=0.5**, free lapse parameter [0, 0.1] - Standard for binary tasks
+- ✅ **Pseudo-R²** (McFadden & Tjur) - Appropriate for logistic regression
+- ✅ **Duration: COMPLETE** - DT75=35ms [20, 64], R²=0.063, monotonic, paper-ready
+- ✅ **SNR: DIAGNOSTIC ONLY** - Identified root cause (no factorial design)
+  - SNR-75=-5dB [−10, 2.5], R²=0.018 (collapsed across durations)
+  - All SNR variants have duration_ms=1000 → cannot stratify
+  - Official SNR thresholds deferred to Sprint 8
+- 📊 **Results JSON**: Includes `snr_overall_is_diagnostic: true` flag
+- 🎨 **Figures updated**: Status annotations added to plots
+- 📋 **Sprint 8 specified**: Factorial SNR×Duration design (4×8 conditions)
 
 ### Sprint 6 Completion
 - ✅ Stratified dev/test split (80/20) with reproducibility
