@@ -95,6 +95,7 @@ class Qwen2AudioClassifier:
                 load_in_4bit=load_in_4bit,
                 load_in_8bit=load_in_8bit,
                 bnb_4bit_compute_dtype=torch.float16 if load_in_4bit else None,
+                llm_int8_enable_fp32_cpu_offload=True,  # Enable CPU offloading for 8GB VRAM
             )
             model_kwargs["quantization_config"] = quantization_config
             model_kwargs["device_map"] = "auto"
