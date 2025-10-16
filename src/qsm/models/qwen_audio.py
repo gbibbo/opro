@@ -181,9 +181,10 @@ class Qwen2AudioClassifier:
 
             # Create logits processor
             from transformers import LogitsProcessorList
-            self.logits_processor = LogitsProcessorList([
-                ConstrainedVocabLogitsProcessor(allowed_ids)
-            ])
+
+            self.logits_processor = LogitsProcessorList(
+                [ConstrainedVocabLogitsProcessor(allowed_ids)]
+            )
 
             print(f"Constrained decoding enabled: only tokens {allowed_ids} allowed")
 
