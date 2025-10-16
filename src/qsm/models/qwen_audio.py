@@ -9,7 +9,7 @@ import librosa
 import numpy as np
 import soundfile as sf
 import torch
-from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration, LogitsProcessor
+from transformers import AutoProcessor, LogitsProcessor, Qwen2AudioForConditionalGeneration
 
 
 @dataclass
