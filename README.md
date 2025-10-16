@@ -58,7 +58,8 @@ Reply with ONLY one word: SPEECH or NON-SPEECH.
 ```
 
 ![Optimization Progress](results/prompt_opt_local/optimization_progress.png)
-*Figure 1: The optimizer found the best prompt in just 2 iterations (80 minutes on RTX 4070 Laptop).*
+
+*Figure 1: The local optimizer found the best prompt in just 2 iterations (80 minutes on RTX 4070 Laptop).*
 
 ---
 
@@ -76,6 +77,7 @@ Reply with ONLY one word: SPEECH or NON-SPEECH.
 - Human perception threshold: ~20-30 ms
 
 ![Duration Curve](results/psychometric_curves/duration_curve.png)
+
 *Figure 2: Psychometric curve showing how accuracy improves with longer audio.*
 
 ### 2. SNR Threshold (SNR-75)
@@ -95,6 +97,7 @@ Reply with ONLY one word: SPEECH or NON-SPEECH.
 **Key Finding**: Longer audio helps the model handle more noise (temporal integration).
 
 ![SNR Curves](results/sprint8_stratified/snr_curves_stratified.png)
+
 *Figure 3: SNR thresholds for different audio durations. Longer = better noise tolerance.*
 
 ### 3. Prompt Optimization
@@ -112,6 +115,7 @@ Reply with ONLY one word: SPEECH or NON-SPEECH.
 **Cost**: $0 (runs completely on local GPU)
 
 ![Prompt Comparison](results/prompt_opt_local/prompt_comparison.png)
+
 *Figure 4: Performance of different prompt styles. Simple questions work best.*
 
 #### What Makes a Good Prompt?
@@ -129,6 +133,7 @@ Reply with ONLY one word: SPEECH or NON-SPEECH.
 - Too verbose
 
 ![Length vs Performance](results/prompt_opt_local/length_vs_performance.png)
+
 *Figure 5: Shorter prompts often perform better. The best prompt has only 9 words.*
 
 ### 4. Performance Across Conditions
@@ -136,6 +141,7 @@ Reply with ONLY one word: SPEECH or NON-SPEECH.
 The optimized prompt works well across all psychoacoustic manipulations:
 
 ![Variant Performance](results/prompt_opt_local/variant_performance.png)
+
 *Figure 6: Optimized prompt (blue) beats baseline (purple) across all conditions.*
 
 | Condition | Baseline | Optimized | Improvement |
@@ -150,7 +156,7 @@ The optimized prompt works well across all psychoacoustic manipulations:
 ## Repository Structure
 
 ```
-OPRO-Qwen/
+Qwen2-Audio-Psychoacoustic/
 ├── README.md                      # This file
 ├── BASELINE_FINAL_REPORT.md       # Complete scientific report
 │
@@ -181,7 +187,7 @@ OPRO-Qwen/
 
 ```bash
 git clone <repository-url>
-cd OPRO-Qwen
+cd Qwen2-Audio-Psychoacoustic
 pip install -r requirements.txt
 ```
 
@@ -386,7 +392,7 @@ If you use this work, please cite:
 ### Completed
 - Baseline psychometric evaluation (DT75, SNR-75)
 - Statistical interaction analysis (GLMM)
-- Local prompt optimization (OPRO-style)
+- Local prompt optimization (using Qwen2.5-3B as optimizer)
 - Constrained decoding implementation
 
 ### In Progress
@@ -395,7 +401,6 @@ If you use this work, please cite:
 - Contextual calibration for multiple-choice prompts
 
 ### Planned
-- DSPy MIPROv2 integration (automatic Bayesian optimization)
 - Fine-tuning on psychoacoustic data
 - Ensemble methods (self-consistency)
 - Cross-model validation (test prompts on other audio LLMs)
@@ -404,13 +409,12 @@ If you use this work, please cite:
 
 ## License
 
-[Add license]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
----
-
-## Contact
-
-[Add contact information]
+**Key points**:
+- Free to use, modify, and distribute
+- Includes warranty disclaimer
+- Requires copyright notice in copies
 
 ---
 

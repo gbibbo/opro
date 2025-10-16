@@ -45,7 +45,11 @@
       "Bash(git rm:*)",
       "Bash(git tag:*)",
       "Bash(conda:*)",
-      "Bash(tee:*)"
+      "Bash(tee:*)",
+      "Bash(for img in results/prompt_opt_local/optimization_progress.png results/psychometric_curves/duration_curve.png results/sprint8_stratified/snr_curves_stratified.png results/prompt_opt_local/prompt_comparison.png results/prompt_opt_local/variant_performance.png results/prompt_opt_local/length_vs_performance.png)",
+      "Bash(do [ -f \"$img\" ])",
+      "Bash(echo:*)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

@@ -43,7 +43,7 @@ def plot_optimization_progress():
 
     ax.set_xlabel('Iteration', fontsize=14, fontweight='bold')
     ax.set_ylabel('Balanced Accuracy (BA_clip)', fontsize=14, fontweight='bold')
-    ax.set_title('Prompt Optimization Progress\nOPRO with Qwen2.5-3B',
+    ax.set_title('Prompt Optimization Progress\nLocal Optimizer with Qwen2.5-3B',
                  fontsize=16, fontweight='bold', pad=20)
     ax.set_xticks(iterations)
     ax.set_ylim([0.8, 1.0])
