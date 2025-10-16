@@ -29,9 +29,11 @@ accelerate>=0.27.0
 scikit-learn>=1.4.0
 scipy>=1.12.0
 
-# OPRO (Sprint 9)
-anthropic>=0.69.0
-openai>=2.0.0
+# Prompt Optimization (Sprint 9)
+dspy-ai>=3.0.0  # DSPy framework for COPRO/MIPROv2
+anthropic>=0.69.0  # Optional: for Claude models
+openai>=2.0.0  # Optional: for GPT models
+optuna>=3.4.0  # Already installed by dspy, but explicit for clarity
 
 # Visualization
 matplotlib>=3.8.0

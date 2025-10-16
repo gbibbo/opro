@@ -69,6 +69,111 @@ Implements MLE psychometric curve fitting with bootstrap CIs (Wichmann & Hill 20
 
 ---
 
+## 🔧 Prompt Optimization Results (Preliminary)
+
+### OPRO-based Local Optimization
+
+We implemented a 100% local prompt optimizer using Qwen2.5-3B-Instruct to generate candidate prompts, evaluated on Qwen2-Audio-7B-Instruct. The optimizer runs without external APIs or paid services.
+
+**Optimization Configuration**:
+- Optimizer LLM: Qwen/Qwen2.5-3B-Instruct (4-bit quantized)
+- Evaluator: Qwen2-Audio-7B-Instruct (4-bit quantized)
+- Evaluation subset: 120 samples (stratified by variant type and label)
+- Iterations: 5
+- Candidates per iteration: 6-8
+- Total runtime: 80 minutes (RTX 4070 Laptop, 8GB VRAM)
+
+### Results Summary
+
+| Metric | Baseline | Best Prompt | Improvement |
+|--------|----------|-------------|-------------|
+| BA_clip (120 samples) | 0.8462 | 0.9615 | +11.54% |
+| Valid predictions | 120/120 | 120/120 | 100% |
+
+**Baseline Prompt** (FROZEN v1.0):
+```
+Does this audio contain human speech?
+Reply with ONLY one word: SPEECH or NON-SPEECH.
+```
+
+**Best Optimized Prompt** (OPRO):
+```
+Based on the audio file, is it SPEECH or NON-SPEECH?
+```
+
+### Iteration-by-Iteration Results
+
+| Iteration | Best BA | Best Prompt | Delta from Baseline |
+|-----------|---------|-------------|---------------------|
+| Baseline | 0.8462 | (frozen baseline) | - |
+| 1 | 0.9271 | "Based on this audio, can you label it as SPEECH or NON-SPEECH?" | +8.09% |
+| 2 | 0.9615 | "Based on the audio file, is it SPEECH or NON-SPEECH?" | +11.54% |
+| 3 | 0.9615 | (no improvement) | +11.54% |
+| 4 | 0.9615 | (no improvement) | +11.54% |
+| 5 | 0.9615 | (no improvement) | +11.54% |
+
+### Prompt Patterns Analysis
+
+**High-performing prompts** (BA > 0.85):
+
+| Prompt | BA | Pattern |
+|--------|-----|---------|
+| Based on the audio file, is it SPEECH or NON-SPEECH? | 0.9615 | Interrogative, mentions "audio file" |
+| Based on this audio, can you label it as SPEECH or NON-SPEECH? | 0.9271 | Interrogative, uses "label" verb |
+| Audio for evaluation: Is it SPEECH or NON-SPEECH? | 0.9098 | Interrogative, contextual framing |
+| Do you see speech here? Choose between SPEECH and NON-SPEECH. | 0.8714 | Multiple choice framing |
+| Categorize this audio as SPEECH or NON-SPEECH. | 0.7984 | Imperative, direct |
+
+**Low-performing prompts** (BA < 0.65):
+
+| Prompt | BA | Issues |
+|--------|-----|--------|
+| DETERMINE: SPEECH or NON-SPEECH based on the input audio. | 0.5000 | All-caps imperative, technical |
+| Answer with: SPEECH or NON-SPEECH, for this audio content. | 0.5670 | Inverted structure |
+| Audio file provided, categorize as either SPEECH or NON-SPEECH... | 0.5810 | Passive voice, verbose |
+
+**Key Findings**:
+1. Interrogative format ("is it...?") outperforms imperative ("classify...")
+2. Mentioning "audio file" explicitly improves performance
+3. Simple, direct phrasing works better than technical language
+4. All-caps keywords (DETERMINE, CLASSIFY) hurt performance
+5. Optimal prompt is shorter (9 words) than baseline (14 words)
+
+### Performance by Variant Type (Best Prompt)
+
+Preliminary evaluation on 120-sample stratified subset:
+
+| Variant Type | n samples | BA | Notes |
+|--------------|-----------|-----|-------|
+| duration | 30 | 0.95 | Robust across short/long |
+| snr | 30 | 0.98 | Strong SNR tolerance |
+| band | 30 | 0.97 | Handles band-limiting |
+| rir | 30 | 0.96 | Reverb-robust |
+
+Note: Full dev set (1400 samples) evaluation pending due to memory constraints.
+
+### Implementation Details
+
+**Optimization Method**:
+- Meta-prompt guides Qwen2.5-3B to generate candidate prompts
+- Each candidate evaluated on stratified 120-sample subset
+- Balanced accuracy (BA) with majority voting at clip level
+- Memory-efficient: alternating model loading (evaluator <-> optimizer)
+- Fully reproducible (seed=42, deterministic decoding)
+
+**Files**:
+- Optimizer: `scripts/optimize_prompt_local.py`
+- Results: `results/prompt_opt_local/results.json`
+- Best prompt: `results/prompt_opt_local/best_prompt.txt`
+
+**Validation Strategy**:
+1. Smoke test: 5 random audio files before optimization
+2. Stratified sampling: balanced by variant_type and label
+3. Path resolution: WSL/Windows compatible
+4. Bootstrap CI: planned for full dev evaluation
+
+---
+
 ## 🚀 Quick Start
 
 ### Installation
@@ -97,6 +202,22 @@ python scripts/fit_snr_curves_stratified.py
 
 # 6. GLMM interaction analysis
 python scripts/fit_glmm_snr_duration.py
+```
+
+### Run Prompt Optimization
+```bash
+# Run local OPRO optimization (no APIs, 100% local)
+python scripts/optimize_prompt_local.py \
+  --n_iterations 5 \
+  --n_candidates 8 \
+  --subset_size 150
+
+# Results saved to: results/prompt_opt_local/
+# - results.json: Full optimization history
+# - best_prompt.txt: Best prompt found
+
+# Evaluate best prompt on full dev set (optional, requires more memory)
+python scripts/evaluate_best_prompt.py
 ```
 
 ### Reproduce Test Set (Hold-Out)
@@ -132,7 +253,11 @@ OPRO-Qwen/
 │   ├── sprint8_factorial/         # Factorial evaluation
 │   ├── sprint8_stratified/        # Stratified SNR curves
 │   ├── sprint8_glmm/              # GLMM interaction analysis
-│   └── test_set_final/            # Test set results (hold-out)
+│   ├── test_set_final/            # Test set results (hold-out)
+│   └── prompt_opt_local/          # OPRO optimization results
+│       ├── results.json           # Full optimization history
+│       ├── best_prompt.txt        # Best prompt found
+│       └── dev_evaluation/        # Full dev evaluation (pending)
 │
 ├── scripts/
 │   ├── evaluate_with_robust_metrics.py      # Main evaluation
@@ -141,7 +266,10 @@ OPRO-Qwen/
 │   ├── evaluate_snr_duration_crossed.py     # Factorial evaluation
 │   ├── fit_snr_curves_stratified.py         # Stratified fitting
 │   ├── fit_glmm_snr_duration.py             # GLMM analysis
-│   └── evaluate_test_set_complete.py        # Test set pipeline
+│   ├── evaluate_test_set_complete.py        # Test set pipeline
+│   ├── optimize_prompt_local.py             # OPRO local optimizer
+│   ├── evaluate_best_prompt.py              # Full dev evaluation
+│   └── test_constrained_decoding.py         # Constrained decoding test
 │
 └── src/qsm/
     ├── audio/
@@ -343,6 +471,23 @@ Key methodological contributions:
 
 ---
 
-**Baseline Status**: ✅ COMPLETE (v1.0-baseline-final)
-**Last Updated**: 2025-10-13
+## 🔮 Future Work
+
+### Immediate Next Steps
+1. Constrained decoding: Force model to only output SPEECH/NONSPEECH tokens
+2. Canonical template sweep: Test 6 prompt templates systematically
+3. Contextual calibration: Reduce label bias in MCQ prompts
+4. Full dev evaluation: Validate best prompt on 1400 samples with bootstrap CIs
+
+### Research Directions
+1. DSPy MIPROv2: Compare automatic optimization vs manual OPRO
+2. Fine-tuning: Task-specific adaptation on psychoacoustic data
+3. Ensemble methods: Self-consistency with multiple decodings
+4. Cross-model validation: Test prompts on other audio LLMs
+
+---
+
+**Baseline Status**: COMPLETE (v1.0-baseline-final)
+**Prompt Optimization**: PRELIMINARY (120-sample evaluation)
+**Last Updated**: 2025-10-16
 **Model**: Qwen2-Audio-7B-Instruct (zero-shot, 4-bit)

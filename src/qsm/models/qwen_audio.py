@@ -9,7 +9,7 @@ import librosa
 import numpy as np
 import soundfile as sf
 import torch
-from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration
+from transformers import AutoProcessor, Qwen2AudioForConditionalGeneration, LogitsProcessor
 
 
 @dataclass
@@ -20,6 +20,43 @@ class PredictionResult:
     confidence: float
     raw_output: str
     latency_ms: float
+
+
+class ConstrainedVocabLogitsProcessor(LogitsProcessor):
+    """
+    Logits processor that constrains decoding to only allowed tokens.
+
+    This forces the model to only output specific words (e.g., SPEECH, NONSPEECH)
+    by masking all other tokens with -inf.
+    """
+
+    def __init__(self, allowed_token_ids: list[int]):
+        """
+        Args:
+            allowed_token_ids: List of token IDs that are allowed to be generated
+        """
+        self.allowed_token_ids = set(allowed_token_ids)
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        """
+        Mask all tokens except the allowed ones.
+
+        Args:
+            input_ids: Input token IDs (batch_size, sequence_length)
+            scores: Logits for next token (batch_size, vocab_size)
+
+        Returns:
+            Modified scores with disallowed tokens masked to -inf
+        """
+        # Create mask: True for allowed tokens, False for others
+        mask = torch.ones_like(scores, dtype=torch.bool)
+        for token_id in self.allowed_token_ids:
+            mask[:, token_id] = False
+
+        # Mask disallowed tokens with -inf
+        scores = scores.masked_fill(mask, float("-inf"))
+
+        return scores
 
 
 class Qwen2AudioClassifier:
@@ -40,6 +77,7 @@ class Qwen2AudioClassifier:
         auto_pad: bool = True,
         pad_target_ms: int = 2000,  # Optimal: 2000ms provides best performance
         pad_noise_amplitude: float = 0.0001,
+        constrained_decoding: bool = False,  # NEW: Force only SPEECH/NONSPEECH tokens
     ):
         """
         Initialize Qwen2-Audio classifier.
@@ -62,6 +100,9 @@ class Qwen2AudioClassifier:
         self.auto_pad = auto_pad
         self.pad_target_ms = pad_target_ms
         self.pad_noise_amplitude = pad_noise_amplitude
+
+        # Constrained decoding
+        self.constrained_decoding = constrained_decoding
 
         # Map dtype string to torch dtype
         dtype_map = {
@@ -127,6 +168,24 @@ class Qwen2AudioClassifier:
             print(
                 f"Auto-padding enabled: <{self.pad_target_ms}ms -> {self.pad_target_ms}ms (noise amplitude: {self.pad_noise_amplitude})"
             )
+
+        # Initialize constrained decoding if enabled
+        self.logits_processor = None
+        if self.constrained_decoding:
+            # Get token IDs for SPEECH and NONSPEECH
+            speech_ids = self.processor.tokenizer.encode("SPEECH", add_special_tokens=False)
+            nonspeech_ids = self.processor.tokenizer.encode("NONSPEECH", add_special_tokens=False)
+
+            # Combine all allowed token IDs
+            allowed_ids = speech_ids + nonspeech_ids
+
+            # Create logits processor
+            from transformers import LogitsProcessorList
+            self.logits_processor = LogitsProcessorList([
+                ConstrainedVocabLogitsProcessor(allowed_ids)
+            ])
+
+            print(f"Constrained decoding enabled: only tokens {allowed_ids} allowed")
 
     def _pad_audio_with_noise(
         self,
@@ -226,11 +285,17 @@ class Qwen2AudioClassifier:
 
         # Generate response
         with torch.no_grad():
-            outputs = self.model.generate(
+            generate_kwargs = {
                 **inputs,
-                max_new_tokens=128,
-                do_sample=False,  # Greedy decoding for consistency
-            )
+                "max_new_tokens": 128,
+                "do_sample": False,  # Greedy decoding for consistency
+            }
+
+            # Add logits processor if constrained decoding is enabled
+            if self.logits_processor is not None:
+                generate_kwargs["logits_processor"] = self.logits_processor
+
+            outputs = self.model.generate(**generate_kwargs)
 
         # Decode ONLY the generated tokens (not the input prompt)
         # outputs contains [input_tokens][generated_tokens], we only want the new ones
