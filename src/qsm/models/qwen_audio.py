@@ -172,55 +172,59 @@ class Qwen2AudioClassifier:
         self.prefix_allowed_tokens_fn = None
 
         if self.constrained_decoding:
-            # For A/B format: derive token IDs dynamically with all variants
+            # For A/B format: get EXACT single token IDs for "A" and "B" only
             tokenizer = self.processor.tokenizer
 
-            # Get all variants of A and B (with/without leading space, with/without newline)
-            a_variants = ["A", " A", "\nA", "A\n", " A\n"]
-            b_variants = ["B", " B", "\nB", "B\n", " B\n"]
+            # Helper function to get single exact token
+            def get_exact_single_token_id(char: str):
+                """Get token ID that decodes to exactly the given character."""
+                ids = tokenizer.encode(char, add_special_tokens=False)
+                if len(ids) == 1 and tokenizer.decode([ids[0]]).strip() == char:
+                    return ids[0]
+                return None
 
-            # Collect unique token IDs for each variant
-            a_ids_set = set()
-            b_ids_set = set()
+            # Get exact token IDs for A and B
+            self.id_A = get_exact_single_token_id("A")
+            self.id_B = get_exact_single_token_id("B")
 
-            for variant in a_variants:
-                ids = tokenizer.encode(variant, add_special_tokens=False)
-                a_ids_set.update(ids)
+            # Get EOS token ID from tokenizer (not hardcoded)
+            self.id_eos = tokenizer.eos_token_id
+            if self.id_eos is None:
+                # Fallback: try to get from model generation config
+                self.id_eos = getattr(self.model.generation_config, "eos_token_id", None)
 
-            for variant in b_variants:
-                ids = tokenizer.encode(variant, add_special_tokens=False)
-                b_ids_set.update(ids)
-
-            # Also allow newline and EOS
-            newline_ids = set(tokenizer.encode("\n", add_special_tokens=False))
-            eos_id = {tokenizer.eos_token_id} if tokenizer.eos_token_id is not None else set()
+            # Validate that we have all required IDs
+            if self.id_A is None or self.id_B is None:
+                raise ValueError(
+                    f"Could not find exact single tokens for A/B. "
+                    f"A: {self.id_A}, B: {self.id_B}"
+                )
+            if self.id_eos is None:
+                raise ValueError("Could not find EOS token ID")
 
             # Store for use in prefix_allowed_tokens_fn
-            self.first_step_allowed = list(a_ids_set | b_ids_set)
-            self.later_step_allowed = list(newline_ids | eos_id)
+            self.first_step_allowed = [self.id_A, self.id_B]
 
-            # Create prefix_allowed_tokens_fn that changes allowed tokens by step
-            def make_prefix_fn(first_allowed, later_allowed, input_length):
+            # Create prefix_allowed_tokens_fn
+            def make_prefix_fn(first_allowed, eos_id):
                 def prefix_fn(batch_id, input_ids):
-                    # Check if we're at the first generated token
-                    current_length = len(input_ids)
-                    if current_length == input_length:
-                        # First step: allow A or B tokens
-                        return first_allowed
-                    else:
-                        # Later steps: only allow newline and EOS
-                        return later_allowed
+                    """Allow only A or B on first step, then only EOS."""
+                    # input_ids includes the prompt; we track generation steps
+                    # by comparing current length to initial length
+                    # This function is called before generating each token
+                    # For max_new_tokens=1, we only need first_allowed
+                    return first_allowed
                 return prefix_fn
 
             # Will be applied during generate() with the actual input length
-            self.prefix_allowed_tokens_fn = make_prefix_fn
+            self.prefix_allowed_tokens_fn_maker = make_prefix_fn
 
             # Debug: print token mappings
             print(f"Constrained decoding enabled (A/B format):")
-            print(f"  A tokens ({len(a_ids_set)}): {[(tid, repr(tokenizer.decode([tid]))) for tid in sorted(a_ids_set)]}")
-            print(f"  B tokens ({len(b_ids_set)}): {[(tid, repr(tokenizer.decode([tid]))) for tid in sorted(b_ids_set)]}")
-            print(f"  First step allowed: {self.first_step_allowed}")
-            print(f"  Later steps allowed: {self.later_step_allowed}")
+            print(f"  Token for 'A': {self.id_A} -> {repr(tokenizer.decode([self.id_A]))}")
+            print(f"  Token for 'B': {self.id_B} -> {repr(tokenizer.decode([self.id_B]))}")
+            print(f"  EOS token: {self.id_eos}")
+            print(f"  Allowed on first (and only) step: {self.first_step_allowed}")
 
     def _pad_audio_with_noise(
         self,
@@ -320,23 +324,22 @@ class Qwen2AudioClassifier:
 
         # Generate response
         with torch.no_grad():
-            # Use minimal tokens for A/B format (max 2: "A" or "B")
-            max_tokens = 2 if self.constrained_decoding else 128
+            # Use single token for A/B format, longer for free-form
+            max_tokens = 1 if self.constrained_decoding else 128
 
             generate_kwargs = {
                 **inputs,
                 "max_new_tokens": max_tokens,
                 "do_sample": False,  # Greedy decoding for consistency
                 "num_beams": 1,  # Disable beam search
+                "pad_token_id": self.processor.tokenizer.eos_token_id,  # Prevent warnings
             }
 
             # Add prefix_allowed_tokens_fn if constrained decoding is enabled
-            if self.prefix_allowed_tokens_fn is not None:
-                input_length = inputs["input_ids"].shape[1]
-                generate_kwargs["prefix_allowed_tokens_fn"] = self.prefix_allowed_tokens_fn(
+            if hasattr(self, "prefix_allowed_tokens_fn_maker"):
+                generate_kwargs["prefix_allowed_tokens_fn"] = self.prefix_allowed_tokens_fn_maker(
                     self.first_step_allowed,
-                    self.later_step_allowed,
-                    input_length
+                    self.id_eos
                 )
 
             outputs = self.model.generate(**generate_kwargs)
