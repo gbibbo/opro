@@ -310,11 +310,12 @@ class Qwen2AudioClassifier:
         )
 
         # Process inputs
-        # IMPORTANT: Must pass as 'audios' (plural list) according to official docs
+        # IMPORTANT: Parameter is 'audio' (singular), NOT 'audios' (plural)
+        # Signature: audio: Union[np.ndarray, list[np.ndarray]]
         inputs = self.processor(
             text=text,
-            audios=[audio],  # List of audio arrays
-            sampling_rate=sr,  # Explicitly pass to avoid warnings
+            audio=audio,  # Single audio array (NOT wrapped in list)
+            sampling_rate=sr,
             return_tensors="pt",
             padding=True,
         )
