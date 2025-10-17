@@ -335,38 +335,60 @@ class Qwen2AudioClassifier:
         Returns:
             Tuple of (label, confidence)
         """
-        # Clean response
+        # Clean response - normalize spaces, remove punctuation, uppercase
+        import re
         response = text.strip().upper()
+        response_normalized = re.sub(r'[^A-Z0-9\s]', '', response)  # Remove punctuation
 
         # Priority 1: Multiple choice format (A/B/C/D)
         # A = Speech, B/C/D = Nonspeech (Music/Noise/Animals)
-        if "A)" in response or response == "A":
+        if "A)" in response or response == "A" or response_normalized == "A":
             return "SPEECH", 1.0
-        elif any(x in response for x in ["B)", "C)", "D)"]) or response in ["B", "C", "D"]:
+        elif any(x in response for x in ["B)", "C)", "D)"]) or response_normalized in ["B", "C", "D"]:
             return "NONSPEECH", 1.0
 
-        # Priority 2: Explicit NONSPEECH or NO-SPEECH keywords
-        if "NONSPEECH" in response or "NO-SPEECH" in response:
+        # Priority 2: Explicit NONSPEECH/NON-SPEECH/NO SPEECH variants
+        # Handle all variations: "NONSPEECH", "NON-SPEECH", "NON SPEECH", "NO SPEECH"
+        nonspeech_patterns = [
+            "NONSPEECH",
+            "NON SPEECH",
+            "NOSPEECH",
+            "NO SPEECH"
+        ]
+        if any(pattern in response_normalized for pattern in nonspeech_patterns):
             return "NONSPEECH", 1.0
 
-        # Priority 3: Explicit SPEECH keyword (but not as part of "no speech")
-        if "SPEECH" in response:
+        # Priority 3: Keywords indicating no speech (noise, silence, music)
+        no_speech_keywords = [
+            "NOISE",
+            "SILENCE",
+            "SILENT",
+            "MUSIC",
+            "BACKGROUND",
+            "AMBIENT",
+            "QUIET"
+        ]
+        if any(keyword in response_normalized for keyword in no_speech_keywords):
+            return "NONSPEECH", 0.9
+
+        # Priority 4: Explicit SPEECH keyword (check it's not negated)
+        if "SPEECH" in response_normalized:
             # Check if it's negated
             # Look for patterns like "NO SPEECH", "NOT SPEECH", "THERE IS NO SPEECH"
-            words_before_speech = response.split("SPEECH")[0]
-            if any(neg in words_before_speech for neg in ["NO", "NOT", "NONE", "WITHOUT"]):
+            words_before_speech = response_normalized.split("SPEECH")[0]
+            if any(neg in words_before_speech for neg in ["NO", "NOT", "NONE", "WITHOUT", "ISNT", "DOESNT"]):
                 return "NONSPEECH", 0.9
             else:
                 return "SPEECH", 1.0
 
-        # Priority 4: Natural language negations
-        negation_patterns = ["THERE IS NO", "THERE ISN'T", "DOES NOT CONTAIN", "NO AUDIO"]
-        if any(pattern in response for pattern in negation_patterns):
+        # Priority 5: Natural language negations
+        negation_patterns = ["THERE IS NO", "THERE ISNT", "DOES NOT CONTAIN", "NO AUDIO", "NOT DETECTED"]
+        if any(pattern in response_normalized for pattern in negation_patterns):
             return "NONSPEECH", 0.8
 
-        # Priority 5: Natural language affirmations
-        affirmation_patterns = ["THERE IS", "CONTAINS", "PRESENT", "YES", "DETECTED"]
-        if any(pattern in response for pattern in affirmation_patterns):
+        # Priority 6: Natural language affirmations
+        affirmation_patterns = ["THERE IS", "CONTAINS", "PRESENT", "YES", "DETECTED", "VOICE", "HUMAN"]
+        if any(pattern in response_normalized for pattern in affirmation_patterns):
             return "SPEECH", 0.8
 
         # Unable to parse - return UNKNOWN
