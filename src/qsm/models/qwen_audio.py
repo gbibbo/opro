@@ -151,16 +151,14 @@ class Qwen2AudioClassifier:
 
         self.model.eval()
 
-        # Default prompt (multiple choice strategy - validated with 100% accuracy on 1000ms segments)
+        # Default prompt (A/B binary format - optimized for gate evaluation)
         self.system_prompt = "You classify audio content."
 
         self.user_prompt = (
-            "What best describes this audio?\n"
-            "A) Human speech or voice\n"
-            "B) Music\n"
-            "C) Noise or silence\n"
-            "D) Animal sounds\n\n"
-            "Answer with ONLY the letter (A, B, C, or D)."
+            "Choose one:\n"
+            "A) SPEECH (human voice)\n"
+            "B) NONSPEECH (music/noise/silence/animals)\n\n"
+            "Answer with A or B ONLY."
         )
 
         print("Model loaded successfully!")
@@ -172,12 +170,19 @@ class Qwen2AudioClassifier:
         # Initialize constrained decoding if enabled
         self.logits_processor = None
         if self.constrained_decoding:
-            # Get token IDs for SPEECH and NONSPEECH
-            speech_ids = self.processor.tokenizer.encode("SPEECH", add_special_tokens=False)
-            nonspeech_ids = self.processor.tokenizer.encode("NONSPEECH", add_special_tokens=False)
+            # For A/B format: only allow tokens A, B, newline, and EOS
+            tokenizer = self.processor.tokenizer
+
+            # Get token IDs for single letters A and B
+            a_ids = tokenizer.encode("A", add_special_tokens=False)
+            b_ids = tokenizer.encode("B", add_special_tokens=False)
+
+            # Also allow newline and EOS to properly terminate
+            newline_ids = tokenizer.encode("\n", add_special_tokens=False)
+            eos_id = [tokenizer.eos_token_id] if tokenizer.eos_token_id is not None else []
 
             # Combine all allowed token IDs
-            allowed_ids = speech_ids + nonspeech_ids
+            allowed_ids = a_ids + b_ids + newline_ids + eos_id
 
             # Create logits processor
             from transformers import LogitsProcessorList
@@ -186,7 +191,7 @@ class Qwen2AudioClassifier:
                 [ConstrainedVocabLogitsProcessor(allowed_ids)]
             )
 
-            print(f"Constrained decoding enabled: only tokens {allowed_ids} allowed")
+            print(f"Constrained decoding enabled (A/B format): tokens {allowed_ids} allowed")
 
     def _pad_audio_with_noise(
         self,
@@ -286,9 +291,12 @@ class Qwen2AudioClassifier:
 
         # Generate response
         with torch.no_grad():
+            # Use minimal tokens for A/B format (max 3: "A\n" or "B\n")
+            max_tokens = 3 if self.constrained_decoding else 128
+
             generate_kwargs = {
                 **inputs,
-                "max_new_tokens": 128,
+                "max_new_tokens": max_tokens,
                 "do_sample": False,  # Greedy decoding for consistency
             }
 
