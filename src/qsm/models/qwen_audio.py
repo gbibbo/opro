@@ -169,29 +169,58 @@ class Qwen2AudioClassifier:
 
         # Initialize constrained decoding if enabled
         self.logits_processor = None
+        self.prefix_allowed_tokens_fn = None
+
         if self.constrained_decoding:
-            # For A/B format: only allow tokens A, B, newline, and EOS
+            # For A/B format: derive token IDs dynamically with all variants
             tokenizer = self.processor.tokenizer
 
-            # Get token IDs for single letters A and B
-            a_ids = tokenizer.encode("A", add_special_tokens=False)
-            b_ids = tokenizer.encode("B", add_special_tokens=False)
+            # Get all variants of A and B (with/without leading space, with/without newline)
+            a_variants = ["A", " A", "\nA", "A\n", " A\n"]
+            b_variants = ["B", " B", "\nB", "B\n", " B\n"]
 
-            # Also allow newline and EOS to properly terminate
-            newline_ids = tokenizer.encode("\n", add_special_tokens=False)
-            eos_id = [tokenizer.eos_token_id] if tokenizer.eos_token_id is not None else []
+            # Collect unique token IDs for each variant
+            a_ids_set = set()
+            b_ids_set = set()
 
-            # Combine all allowed token IDs
-            allowed_ids = a_ids + b_ids + newline_ids + eos_id
+            for variant in a_variants:
+                ids = tokenizer.encode(variant, add_special_tokens=False)
+                a_ids_set.update(ids)
 
-            # Create logits processor
-            from transformers import LogitsProcessorList
+            for variant in b_variants:
+                ids = tokenizer.encode(variant, add_special_tokens=False)
+                b_ids_set.update(ids)
 
-            self.logits_processor = LogitsProcessorList(
-                [ConstrainedVocabLogitsProcessor(allowed_ids)]
-            )
+            # Also allow newline and EOS
+            newline_ids = set(tokenizer.encode("\n", add_special_tokens=False))
+            eos_id = {tokenizer.eos_token_id} if tokenizer.eos_token_id is not None else set()
 
-            print(f"Constrained decoding enabled (A/B format): tokens {allowed_ids} allowed")
+            # Store for use in prefix_allowed_tokens_fn
+            self.first_step_allowed = list(a_ids_set | b_ids_set)
+            self.later_step_allowed = list(newline_ids | eos_id)
+
+            # Create prefix_allowed_tokens_fn that changes allowed tokens by step
+            def make_prefix_fn(first_allowed, later_allowed, input_length):
+                def prefix_fn(batch_id, input_ids):
+                    # Check if we're at the first generated token
+                    current_length = len(input_ids)
+                    if current_length == input_length:
+                        # First step: allow A or B tokens
+                        return first_allowed
+                    else:
+                        # Later steps: only allow newline and EOS
+                        return later_allowed
+                return prefix_fn
+
+            # Will be applied during generate() with the actual input length
+            self.prefix_allowed_tokens_fn = make_prefix_fn
+
+            # Debug: print token mappings
+            print(f"Constrained decoding enabled (A/B format):")
+            print(f"  A tokens ({len(a_ids_set)}): {[(tid, repr(tokenizer.decode([tid]))) for tid in sorted(a_ids_set)]}")
+            print(f"  B tokens ({len(b_ids_set)}): {[(tid, repr(tokenizer.decode([tid]))) for tid in sorted(b_ids_set)]}")
+            print(f"  First step allowed: {self.first_step_allowed}")
+            print(f"  Later steps allowed: {self.later_step_allowed}")
 
     def _pad_audio_with_noise(
         self,
@@ -291,18 +320,24 @@ class Qwen2AudioClassifier:
 
         # Generate response
         with torch.no_grad():
-            # Use minimal tokens for A/B format (max 3: "A\n" or "B\n")
-            max_tokens = 3 if self.constrained_decoding else 128
+            # Use minimal tokens for A/B format (max 2: "A" or "B")
+            max_tokens = 2 if self.constrained_decoding else 128
 
             generate_kwargs = {
                 **inputs,
                 "max_new_tokens": max_tokens,
                 "do_sample": False,  # Greedy decoding for consistency
+                "num_beams": 1,  # Disable beam search
             }
 
-            # Add logits processor if constrained decoding is enabled
-            if self.logits_processor is not None:
-                generate_kwargs["logits_processor"] = self.logits_processor
+            # Add prefix_allowed_tokens_fn if constrained decoding is enabled
+            if self.prefix_allowed_tokens_fn is not None:
+                input_length = inputs["input_ids"].shape[1]
+                generate_kwargs["prefix_allowed_tokens_fn"] = self.prefix_allowed_tokens_fn(
+                    self.first_step_allowed,
+                    self.later_step_allowed,
+                    input_length
+                )
 
             outputs = self.model.generate(**generate_kwargs)
 
