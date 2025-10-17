@@ -284,9 +284,10 @@ class Qwen2AudioClassifier:
             audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
             sr = 16000
 
-        # Apply automatic padding if enabled
-        if self.auto_pad:
-            audio = self._pad_audio_with_noise(audio, sample_rate=sr)
+        # Validate audio (no auto-padding - let processor handle it)
+        rms = np.sqrt(np.mean(audio ** 2))
+        if rms < 1e-3:
+            print(f"[WARNING] Very low RMS ({rms:.6f}) - audio may be silent")
 
         # Start timing
         start_time = time.time()
@@ -309,11 +310,10 @@ class Qwen2AudioClassifier:
         )
 
         # Process inputs
-        # IMPORTANT: Parameter is 'audio' (singular), not 'audios' (plural)
-        # Must pass numpy array directly, not wrapped in list
+        # IMPORTANT: Must pass as 'audios' (plural list) according to official docs
         inputs = self.processor(
             text=text,
-            audio=audio,  # Singular, numpy array directly
+            audios=[audio],  # List of audio arrays
             sampling_rate=sr,  # Explicitly pass to avoid warnings
             return_tensors="pt",
             padding=True,
