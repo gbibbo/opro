@@ -212,8 +212,7 @@ class Qwen2AudioClassifier:
             # Validate that we have all required IDs
             if not ids_a or not ids_b:
                 raise ValueError(
-                    f"Could not find single tokens for A/B. "
-                    f"A: {ids_a}, B: {ids_b}"
+                    f"Could not find single tokens for A/B. " f"A: {ids_a}, B: {ids_b}"
                 )
             if self.id_eos is None:
                 raise ValueError("Could not find EOS token ID")
@@ -230,6 +229,7 @@ class Qwen2AudioClassifier:
                     # This function is called before generating each token
                     # For max_new_tokens=1, we only need first_allowed
                     return first_allowed
+
                 return prefix_fn
 
             # Will be applied during generate() with the actual input length
@@ -237,8 +237,12 @@ class Qwen2AudioClassifier:
 
             # Debug: print token mappings
             print("Constrained decoding enabled (A/B format):")
-            print(f"  Tokens for 'A': {ids_a} -> {[repr(tokenizer.decode([tid])) for tid in ids_a]}")
-            print(f"  Tokens for 'B': {ids_b} -> {[repr(tokenizer.decode([tid])) for tid in ids_b]}")
+            print(
+                f"  Tokens for 'A': {ids_a} -> {[repr(tokenizer.decode([tid])) for tid in ids_a]}"
+            )
+            print(
+                f"  Tokens for 'B': {ids_b} -> {[repr(tokenizer.decode([tid])) for tid in ids_b]}"
+            )
             print(f"  EOS token: {self.id_eos}")
             print(f"  Total allowed on first step: {len(self.first_step_allowed)} tokens")
 
@@ -304,7 +308,7 @@ class Qwen2AudioClassifier:
             sr = target_sr
 
         # Validate audio (no auto-padding - let processor handle it)
-        rms = np.sqrt(np.mean(audio ** 2))
+        rms = np.sqrt(np.mean(audio**2))
         if rms < 1e-3:
             print(f"[WARNING] Very low RMS ({rms:.6f}) - audio may be silent")
 
@@ -374,8 +378,7 @@ class Qwen2AudioClassifier:
             # Add prefix_allowed_tokens_fn if constrained decoding is enabled
             if hasattr(self, "prefix_allowed_tokens_fn_maker"):
                 generate_kwargs["prefix_allowed_tokens_fn"] = self.prefix_allowed_tokens_fn_maker(
-                    self.first_step_allowed,
-                    self.id_eos
+                    self.first_step_allowed, self.id_eos
                 )
 
             outputs = self.model.generate(**generate_kwargs)
@@ -419,24 +422,24 @@ class Qwen2AudioClassifier:
         """
         # Clean response - normalize spaces, remove punctuation, uppercase
         import re
+
         response = text.strip().upper()
-        response_normalized = re.sub(r'[^A-Z0-9\s]', '', response)  # Remove punctuation
+        response_normalized = re.sub(r"[^A-Z0-9\s]", "", response)  # Remove punctuation
 
         # Priority 1: Multiple choice format (A/B/C/D)
         # A = Speech, B/C/D = Nonspeech (Music/Noise/Animals)
         if "A)" in response or response == "A" or response_normalized == "A":
             return "SPEECH", 1.0
-        elif any(x in response for x in ["B)", "C)", "D)"]) or response_normalized in ["B", "C", "D"]:
+        elif any(x in response for x in ["B)", "C)", "D)"]) or response_normalized in [
+            "B",
+            "C",
+            "D",
+        ]:
             return "NONSPEECH", 1.0
 
         # Priority 2: Explicit NONSPEECH/NON-SPEECH/NO SPEECH variants
         # Handle all variations: "NONSPEECH", "NON-SPEECH", "NON SPEECH", "NO SPEECH"
-        nonspeech_patterns = [
-            "NONSPEECH",
-            "NON SPEECH",
-            "NOSPEECH",
-            "NO SPEECH"
-        ]
+        nonspeech_patterns = ["NONSPEECH", "NON SPEECH", "NOSPEECH", "NO SPEECH"]
         if any(pattern in response_normalized for pattern in nonspeech_patterns):
             return "NONSPEECH", 1.0
 
@@ -448,7 +451,7 @@ class Qwen2AudioClassifier:
             "MUSIC",
             "BACKGROUND",
             "AMBIENT",
-            "QUIET"
+            "QUIET",
         ]
         if any(keyword in response_normalized for keyword in no_speech_keywords):
             return "NONSPEECH", 0.9
@@ -458,18 +461,35 @@ class Qwen2AudioClassifier:
             # Check if it's negated
             # Look for patterns like "NO SPEECH", "NOT SPEECH", "THERE IS NO SPEECH"
             words_before_speech = response_normalized.split("SPEECH")[0]
-            if any(neg in words_before_speech for neg in ["NO", "NOT", "NONE", "WITHOUT", "ISNT", "DOESNT"]):
+            if any(
+                neg in words_before_speech
+                for neg in ["NO", "NOT", "NONE", "WITHOUT", "ISNT", "DOESNT"]
+            ):
                 return "NONSPEECH", 0.9
             else:
                 return "SPEECH", 1.0
 
         # Priority 5: Natural language negations
-        negation_patterns = ["THERE IS NO", "THERE ISNT", "DOES NOT CONTAIN", "NO AUDIO", "NOT DETECTED"]
+        negation_patterns = [
+            "THERE IS NO",
+            "THERE ISNT",
+            "DOES NOT CONTAIN",
+            "NO AUDIO",
+            "NOT DETECTED",
+        ]
         if any(pattern in response_normalized for pattern in negation_patterns):
             return "NONSPEECH", 0.8
 
         # Priority 6: Natural language affirmations
-        affirmation_patterns = ["THERE IS", "CONTAINS", "PRESENT", "YES", "DETECTED", "VOICE", "HUMAN"]
+        affirmation_patterns = [
+            "THERE IS",
+            "CONTAINS",
+            "PRESENT",
+            "YES",
+            "DETECTED",
+            "VOICE",
+            "HUMAN",
+        ]
         if any(pattern in response_normalized for pattern in affirmation_patterns):
             return "SPEECH", 0.8
 
