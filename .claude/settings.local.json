@@ -50,7 +50,8 @@
       "Bash(do [ -f \"$img\" ])",
       "Bash(echo:*)",
       "Bash(done)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(pip show:*)"
     ],
     "deny": [],
     "ask": []
