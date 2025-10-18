@@ -126,25 +126,54 @@ class SpeechDetectionDataset(Dataset):
             },
         ]
 
+        # Get answer token for finding the offset
+        answer_text = "A" if row['ground_truth'] == 'SPEECH' else "B"
+
         # Apply chat template
         text = self.processor.apply_chat_template(
             conversation, add_generation_prompt=False, tokenize=False
         )
 
         # Process inputs
-        # Note: Processor does not accept sampling_rate parameter
-        # Audio must already be at correct sampling rate (16kHz for Qwen2-Audio)
+        # IMPORTANT: Pass sampling_rate explicitly to avoid silent errors
         inputs = self.processor(
             text=text,
             audio=[audio],
+            sampling_rate=target_sr,  # Must pass explicitly for WhisperFeatureExtractor
             return_tensors="pt",
+            padding=True,
         )
 
         # Remove batch dimension
         inputs = {k: v.squeeze(0) for k, v in inputs.items()}
 
-        # Create labels (for causal LM, labels = input_ids)
-        inputs["labels"] = inputs["input_ids"].clone()
+        # Create labels with masking: only compute loss on the assistant's response token
+        # This is much more efficient than computing loss on the entire prompt
+        labels = inputs["input_ids"].clone()
+
+        # Find the position of the assistant's response
+        # Strategy: Find where the answer token appears near the end
+        answer_token_ids = self.processor.tokenizer.encode(answer_text, add_special_tokens=False)
+
+        # Search from the end backwards for the answer token
+        input_ids_list = labels.tolist()
+        assistant_response_start = -1
+
+        # Look for the answer token in the last 20 tokens (should be at the very end)
+        for i in range(len(input_ids_list) - 1, max(len(input_ids_list) - 20, -1), -1):
+            if len(answer_token_ids) == 1 and input_ids_list[i] == answer_token_ids[0]:
+                assistant_response_start = i
+                break
+            elif len(answer_token_ids) > 1 and i + len(answer_token_ids) <= len(input_ids_list):
+                if input_ids_list[i:i+len(answer_token_ids)] == answer_token_ids:
+                    assistant_response_start = i
+                    break
+
+        # Mask everything before the assistant's response with -100
+        if assistant_response_start > 0:
+            labels[:assistant_response_start] = -100
+
+        inputs["labels"] = labels
 
         return inputs
 

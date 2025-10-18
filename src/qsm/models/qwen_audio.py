@@ -291,10 +291,13 @@ class Qwen2AudioClassifier:
         # Load audio (Qwen2-Audio expects 16kHz numpy array)
         audio, sr = sf.read(audio_path)
 
+        # Get target sample rate from processor
+        target_sr = self.processor.feature_extractor.sampling_rate
+
         # Resample if needed
-        if sr != 16000:
-            audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
-            sr = 16000
+        if sr != target_sr:
+            audio = librosa.resample(audio, orig_sr=sr, target_sr=target_sr)
+            sr = target_sr
 
         # Validate audio (no auto-padding - let processor handle it)
         rms = np.sqrt(np.mean(audio ** 2))
@@ -330,6 +333,7 @@ class Qwen2AudioClassifier:
         inputs = self.processor(
             text=text,
             audio=[audio],  # Must be list, even for single audio
+            sampling_rate=target_sr,  # Explicit sampling_rate to avoid warnings
             return_tensors="pt",
             padding=True,
         )
@@ -360,7 +364,6 @@ class Qwen2AudioClassifier:
                 **inputs,
                 "max_new_tokens": max_tokens,
                 "do_sample": False,  # Greedy decoding for consistency
-                "num_beams": 1,  # Disable beam search
                 "pad_token_id": self.processor.tokenizer.eos_token_id,  # Prevent warnings
             }
 

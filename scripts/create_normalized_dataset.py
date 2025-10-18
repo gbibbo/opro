@@ -12,8 +12,42 @@ script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-def normalize_audio(audio: np.ndarray, target_rms: float = 0.1) -> np.ndarray:
-    """Normalize audio to target RMS level.
+def normalize_audio_peak(audio: np.ndarray, target_peak: float = 0.9, headroom_db: float = 3.0) -> np.ndarray:
+    """Normalize audio by peak level, preserving relative energy differences (SNR).
+
+    This is better than RMS normalization because it doesn't equalize the energy
+    of all clips - clips with more noise will still have lower effective signal
+    compared to clean clips, preserving SNR as a discriminative feature.
+
+    Args:
+        audio: Input audio array
+        target_peak: Target peak level after normalization (default: 0.9 to avoid clipping)
+        headroom_db: Additional headroom in dB to prevent clipping (default: 3.0)
+
+    Returns:
+        Peak-normalized audio (preserves SNR)
+    """
+    # Find current peak
+    current_peak = np.abs(audio).max()
+
+    if current_peak < 1e-6:  # Too quiet, skip
+        return audio
+
+    # Calculate gain to reach target peak with headroom
+    headroom_factor = 10 ** (-headroom_db / 20.0)
+    gain = (target_peak * headroom_factor) / current_peak
+
+    # Apply gain
+    normalized = audio * gain
+
+    # Safety clip (should rarely trigger with proper headroom)
+    normalized = np.clip(normalized, -1.0, 1.0)
+
+    return normalized
+
+
+def normalize_audio_rms(audio: np.ndarray, target_rms: float = 0.1) -> np.ndarray:
+    """Normalize audio to target RMS level (LEGACY - destroys SNR as a feature).
 
     Args:
         audio: Input audio array
@@ -41,7 +75,7 @@ def normalize_audio(audio: np.ndarray, target_rms: float = 0.1) -> np.ndarray:
 
 def main():
     print("=" * 80)
-    print("NORMALIZED DATASET CREATION")
+    print("NORMALIZED DATASET CREATION (Peak-based, preserves SNR)")
     print("=" * 80)
 
     # Use clean clips as input
@@ -78,8 +112,8 @@ def main():
         # Load audio
         audio, sr = sf.read(input_path)
 
-        # Normalize
-        audio_normalized = normalize_audio(audio, target_rms=0.1)
+        # Normalize by peak (preserves SNR)
+        audio_normalized = normalize_audio_peak(audio, target_peak=0.9, headroom_db=3.0)
 
         # Save
         output_filename = input_path.stem.replace('_clean_', '_normalized_') + '.wav'
