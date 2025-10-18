@@ -9,7 +9,11 @@ import librosa
 import numpy as np
 import soundfile as sf
 import torch
-from transformers import AutoProcessor, LogitsProcessor, Qwen2AudioForConditionalGeneration, Qwen2AudioProcessor
+from transformers import (
+    LogitsProcessor,
+    Qwen2AudioForConditionalGeneration,
+    Qwen2AudioProcessor,
+)
 
 
 @dataclass
@@ -192,12 +196,12 @@ class Qwen2AudioClassifier:
                 return list(set(valid_ids))  # Remove duplicates
 
             # Get all valid token IDs for A and B
-            ids_A = get_single_token_variants("A")
-            ids_B = get_single_token_variants("B")
+            ids_a = get_single_token_variants("A")
+            ids_b = get_single_token_variants("B")
 
             # Keep first ID for display
-            self.id_A = ids_A[0] if ids_A else None
-            self.id_B = ids_B[0] if ids_B else None
+            self.id_A = ids_a[0] if ids_a else None
+            self.id_B = ids_b[0] if ids_b else None
 
             # Get EOS token ID from tokenizer (not hardcoded)
             self.id_eos = tokenizer.eos_token_id
@@ -206,16 +210,16 @@ class Qwen2AudioClassifier:
                 self.id_eos = getattr(self.model.generation_config, "eos_token_id", None)
 
             # Validate that we have all required IDs
-            if not ids_A or not ids_B:
+            if not ids_a or not ids_b:
                 raise ValueError(
                     f"Could not find single tokens for A/B. "
-                    f"A: {ids_A}, B: {ids_B}"
+                    f"A: {ids_a}, B: {ids_b}"
                 )
             if self.id_eos is None:
                 raise ValueError("Could not find EOS token ID")
 
             # Store ALL variants for use in prefix_allowed_tokens_fn (no bias)
-            self.first_step_allowed = ids_A + ids_B
+            self.first_step_allowed = ids_a + ids_b
 
             # Create prefix_allowed_tokens_fn
             def make_prefix_fn(first_allowed, eos_id):
@@ -232,9 +236,9 @@ class Qwen2AudioClassifier:
             self.prefix_allowed_tokens_fn_maker = make_prefix_fn
 
             # Debug: print token mappings
-            print(f"Constrained decoding enabled (A/B format):")
-            print(f"  Tokens for 'A': {ids_A} -> {[repr(tokenizer.decode([tid])) for tid in ids_A]}")
-            print(f"  Tokens for 'B': {ids_B} -> {[repr(tokenizer.decode([tid])) for tid in ids_B]}")
+            print("Constrained decoding enabled (A/B format):")
+            print(f"  Tokens for 'A': {ids_a} -> {[repr(tokenizer.decode([tid])) for tid in ids_a]}")
+            print(f"  Tokens for 'B': {ids_b} -> {[repr(tokenizer.decode([tid])) for tid in ids_b]}")
             print(f"  EOS token: {self.id_eos}")
             print(f"  Total allowed on first step: {len(self.first_step_allowed)} tokens")
 
