@@ -85,8 +85,9 @@ def train_single_seed(seed: int, output_dir: Path) -> RunResult:
         check=True,
     )
 
-    # Parse results (simplified - you'd parse the actual output)
-    # This is a placeholder - implement proper parsing
+    # Parse results from test output
+    import re
+
     lines = result.stdout.split("\n")
     accuracy = 0.0
     speech_acc = 0.0
@@ -97,27 +98,35 @@ def train_single_seed(seed: int, output_dir: Path) -> RunResult:
     predictions = []
 
     for line in lines:
-        if "RESULT:" in line:
-            # Parse: "RESULT: 29/32 = 90.6%"
-            parts = line.split("=")
-            if len(parts) >= 2:
-                accuracy = float(parts[1].strip().rstrip("%"))
-        elif "SPEECH:" in line and "=" in line:
-            parts = line.split("=")
-            if len(parts) >= 2:
-                speech_acc = float(parts[1].strip().rstrip("%"))
-        elif "NONSPEECH:" in line and "=" in line:
-            parts = line.split("=")
-            if len(parts) >= 2:
-                nonspeech_acc = float(parts[1].strip().rstrip("%"))
+        # Match: "RESULT: 29/32 = 90.6%"
+        if "RESULT:" in line and "=" in line:
+            match = re.search(r'(\d+)/(\d+)\s*=\s*([\d.]+)%', line)
+            if match:
+                accuracy = float(match.group(3))
+
+        # Match: "  SPEECH:    14/16 = 87.5%"
+        elif "SPEECH:" in line and "/" in line and "=" in line:
+            match = re.search(r'(\d+)/(\d+)\s*=\s*([\d.]+)%', line)
+            if match:
+                speech_acc = float(match.group(3))
+
+        # Match: "  NONSPEECH: 16/16 = 100.0%"
+        elif "NONSPEECH:" in line and "/" in line and "=" in line:
+            match = re.search(r'(\d+)/(\d+)\s*=\s*([\d.]+)%', line)
+            if match:
+                nonspeech_acc = float(match.group(3))
+
+        # Match: "  Correct avg:  0.731"
         elif "Correct avg:" in line:
-            parts = line.split(":")
-            if len(parts) >= 2:
-                conf_correct = float(parts[1].strip())
+            match = re.search(r'Correct avg:\s*([\d.]+)', line)
+            if match:
+                conf_correct = float(match.group(1))
+
+        # Match: "  Wrong avg:    0.574"
         elif "Wrong avg:" in line:
-            parts = line.split(":")
-            if len(parts) >= 2:
-                conf_wrong = float(parts[1].strip())
+            match = re.search(r'Wrong avg:\s*([\d.]+)', line)
+            if match:
+                conf_wrong = float(match.group(1))
 
     return RunResult(
         seed=seed,

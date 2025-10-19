@@ -72,13 +72,30 @@ def load_finetuned_model(checkpoint_dir: Path, base_model_name: str):
 
 
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Test fine-tuned model")
+    parser.add_argument(
+        "--checkpoint",
+        type=str,
+        default=str(project_root / "checkpoints" / "qwen2_audio_speech_detection_normalized" / "final"),
+        help="Path to model checkpoint directory",
+    )
+    parser.add_argument(
+        "--test_csv",
+        type=str,
+        default=str(project_root / "data" / "processed" / "normalized_clips" / "test_metadata.csv"),
+        help="Path to test CSV",
+    )
+    args = parser.parse_args()
+
     print("=" * 80)
     print("TESTING FINE-TUNED MODEL (Normalized Audio)")
     print("=" * 80)
 
     # Paths - use normalized clips
-    checkpoint_dir = project_root / "checkpoints" / "qwen2_audio_speech_detection_normalized" / "final"
-    test_csv = project_root / "data" / "processed" / "normalized_clips" / "test_metadata.csv"
+    checkpoint_dir = Path(args.checkpoint)
+    test_csv = Path(args.test_csv)
 
     if not checkpoint_dir.exists():
         print(f"\n[ERROR] Checkpoint not found: {checkpoint_dir}")
