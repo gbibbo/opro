@@ -325,6 +325,11 @@ def main():
     print(f"\nPreparing model for k-bit training...")
     model = prepare_model_for_kbit_training(model)
 
+    # Enable gradient checkpointing with use_reentrant=False (recommended by PyTorch 2.4+)
+    model.gradient_checkpointing_enable(
+        gradient_checkpointing_kwargs={"use_reentrant": False}
+    )
+
     # Apply LoRA
     print(f"\nApplying LoRA...")
 

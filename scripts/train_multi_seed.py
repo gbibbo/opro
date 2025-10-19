@@ -49,13 +49,20 @@ def train_single_seed(seed: int, output_dir: Path) -> RunResult:
     print(f"TRAINING WITH SEED {seed}")
     print(f"{'=' * 80}\n")
 
+    # Clean up CUDA cache before training (prevents OOM between runs)
+    import torch
+    import gc
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        gc.collect()
+
     # Set seed in environment
     import os
 
     os.environ["PYTHONHASHSEED"] = str(seed)
 
     # Import after setting seed
-    import torch
     import random
 
     torch.manual_seed(seed)
@@ -104,17 +111,17 @@ def train_single_seed(seed: int, output_dir: Path) -> RunResult:
             if match:
                 accuracy = float(match.group(3))
 
-        # Match: "  SPEECH:    14/16 = 87.5%"
-        elif "SPEECH:" in line and "/" in line and "=" in line:
-            match = re.search(r'(\d+)/(\d+)\s*=\s*([\d.]+)%', line)
-            if match:
-                speech_acc = float(match.group(3))
-
-        # Match: "  NONSPEECH: 16/16 = 100.0%"
-        elif "NONSPEECH:" in line and "/" in line and "=" in line:
+        # Match class-specific lines with regex to distinguish SPEECH vs NONSPEECH
+        # IMPORTANT: Check NONSPEECH first since "NONSPEECH" contains "SPEECH"!
+        elif re.match(r'^\s*NONSPEECH:', line):
             match = re.search(r'(\d+)/(\d+)\s*=\s*([\d.]+)%', line)
             if match:
                 nonspeech_acc = float(match.group(3))
+
+        elif re.match(r'^\s*SPEECH:', line):
+            match = re.search(r'(\d+)/(\d+)\s*=\s*([\d.]+)%', line)
+            if match:
+                speech_acc = float(match.group(3))
 
         # Match: "  Correct avg:  0.731"
         elif "Correct avg:" in line:
