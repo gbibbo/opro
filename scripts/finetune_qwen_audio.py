@@ -375,6 +375,8 @@ def main():
         metric_for_best_model="eval_loss",
         greater_is_better=False,
         report_to="none",  # Disable wandb/tensorboard
+        save_safetensors=True,  # Use safetensors format (more efficient)
+        save_only_model=True,  # Don't save optimizer/scheduler (saves disk space)
     )
 
     # Trainer
