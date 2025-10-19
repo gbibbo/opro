@@ -401,7 +401,7 @@ def main():
     final_dir = config.output_dir / "final"
     trainer.save_model(str(final_dir))
 
-    print(f"\n✓ Fine-tuning complete!")
+    print(f"\n[OK] Fine-tuning complete!")
     print(f"  Model saved to: {final_dir}")
     print("\nNext steps:")
     print(f"  1. Test the model: python scripts/test_finetuned_model.py")

@@ -51,7 +51,9 @@
       "Bash(echo:*)",
       "Bash(done)",
       "Bash(pkill:*)",
-      "Bash(pip show:*)"
+      "Bash(pip show:*)",
+      "Bash(wmic logicaldisk where \"DeviceID=''C:''\" get FreeSpace,Size)",
+      "Bash(du:*)"
     ],
     "deny": [],
     "ask": []
