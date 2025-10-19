@@ -43,8 +43,8 @@ class TrainingConfig:
 
     # Training
     num_epochs: int = 3
-    batch_size: int = 4
-    gradient_accumulation_steps: int = 4
+    batch_size: int = 2  # Reduced from 4 to avoid OOM
+    gradient_accumulation_steps: int = 8  # Increased to maintain effective batch size of 16
     learning_rate: float = 2e-4
     warmup_steps: int = 100
 

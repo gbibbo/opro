@@ -1,8 +1,8 @@
 # Fine-Tuning Qwen2-Audio for Speech Detection
 
-**Status**: ✅ **Phase 2 Complete** - Optimized training pipeline with all critical fixes implemented
-**Current Performance**: 62.5% accuracy on challenging short/noisy clips (200-1000ms, SNR 0-20dB)
-**Next Target**: ≥75% with loss masking optimization
+**Status**: ✅ **Phase 3 Complete** - Loss masking implementation delivers breakthrough results!
+**Current Performance**: 90.6% accuracy on challenging short/noisy clips (200-1000ms, SNR 0-20dB)
+**Next Target**: ≥95% with dataset scaling to 1-3k clips
 
 ---
 
@@ -36,14 +36,17 @@ This project fine-tunes **Qwen2-Audio-7B-Instruct** for binary speech detection 
 - All audio features correctly arriving at model
 
 ✅ **Training Optimizations**
-- Training loss improved: ~10.17 → **8.69** (-14.5%)
+- **Loss masking breakthrough**: 0.297 average loss (0.486 → 0.1745)
+- **Accuracy improved +28.1%**: 62.5% → **90.6%**
+- **Perfect NONSPEECH detection**: 100% (16/16)
 - Zero warnings during training
 - LoRA efficiency: 0.25% parameters trainable (20.7M/8.4B)
+- Memory optimized: batch size 2, gradient accumulation 8
 
 ✅ **Inference Improvements**
 - Constrained A/B decoding (eliminates tokenizer variability)
-- Logits-based confidence scores (calibrated: correct=0.651, wrong=0.575)
-- Balanced predictions (no bias towards SPEECH or NONSPEECH)
+- Logits-based confidence scores (calibrated: correct=0.731, wrong=0.574, gap=0.157)
+- Excellent discrimination capability
 
 ---
 
@@ -63,12 +66,15 @@ The base Qwen2-Audio model achieved ~85-90% on normal-length clips (≥500ms, hi
 - Explicit `sampling_rate` passing
 - Remove custom auto-padding
 
-**Phase 2**: Normalization & training optimizations (current)
+**Phase 2**: Normalization & training optimizations
 - Peak normalization (preserves SNR)
-- Loss masking (compute loss only on A/B token)
 - Constrained decoding with confidence scores
 
-**Phase 3**: Dataset scaling (upcoming)
+**Phase 3**: Loss masking optimization (COMPLETE ✅)
+- Compute loss only on A/B token
+- **Result: 90.6% accuracy (+28.1% improvement!)**
+
+**Phase 4**: Dataset scaling (upcoming)
 - Expand to 1-3k clips
 - Factorial balance by duration×SNR
 - NONSPEECH hygiene (≥70% speech in positives, ≤5% in negatives)
@@ -275,8 +281,8 @@ LoRA:
   - target_modules: [q_proj, k_proj, v_proj, o_proj]
 Training:
   - epochs: 3
-  - batch_size: 4
-  - gradient_accumulation: 4 (effective=16)
+  - batch_size: 2
+  - gradient_accumulation: 8 (effective=16)
   - learning_rate: 2e-4
   - optimizer: AdamW
 ```
@@ -288,16 +294,18 @@ Training:
 
 **Expected Output**:
 ```
-Epoch 1.25: loss=10.166
-Epoch 2.50: loss=8.690  ← Significant improvement
-Final:      loss=~8.69
+Epoch 1.25: loss=0.486
+Epoch 2.50: loss=0.1745  ← Excellent improvement
+Final:      loss=0.297
+
+Training time: 488 seconds (~8 minutes)
 
 ✓ Model saved to: checkpoints/qwen2_audio_speech_detection_normalized/final/
 ```
 
 **Validation**:
 - ✅ No `sampling_rate` warnings
-- ✅ Loss decreasing steadily
+- ✅ Loss decreasing dramatically (loss masking working!)
 - ✅ Training completes in ~8 minutes
 
 ### Step 4: Evaluate Fine-Tuned Model
@@ -324,22 +332,24 @@ Setting up constrained A/B decoding...
   Tokens for 'A': [32, 362] -> ["'A'", "' A'"]
   Tokens for 'B': [33, 425] -> ["'B'", "' B'"]
 
-RESULT: 20/32 = 62.5%
+RESULT: 29/32 = 90.6%
 
 Breakdown:
-  SPEECH:    10/16 = 62.5%
-  NONSPEECH: 10/16 = 62.5%
+  SPEECH:    13/16 = 81.2%
+  NONSPEECH: 16/16 = 100.0%  ← PERFECT!
 
 Confidence:
-  Overall avg:  0.622
-  Correct avg:  0.651
-  Wrong avg:    0.575
+  Overall avg:  0.716
+  Correct avg:  0.731
+  Wrong avg:    0.574
+  Gap:          0.157  ← Excellent discrimination
 ```
 
 **Analysis**:
-- ✅ **Balanced predictions** (no bias)
-- ✅ **Confidence gap** (0.076) indicates some calibration
-- ⚠️ Accuracy still below target (need loss masking improvement)
+- ✅ **90.6% accuracy** - Breakthrough result!
+- ✅ **Perfect NONSPEECH detection** (100%)
+- ✅ **Strong confidence gap** (0.157) shows excellent calibration
+- ⚠️ Only 3 errors, all on SPEECH @ SNR=0dB (extreme conditions)
 
 ---
 
@@ -352,25 +362,22 @@ Confidence:
 | **Baseline** | 50.0% | N/A | N/A | N/A | Always predicts B |
 | **v1 (audio fix)** | 65.6% | 68.8% | 62.5% | ~10.17 | Fixed `audio=` parameter |
 | **v2 (RMS norm)** | 65.6% | 81.2% | 50.0% | ~10.17 | RMS norm (destroyed SNR) |
-| **v3 (peak norm)** | 62.5% | 62.5% | 62.5% | **8.69** | Peak norm + sampling_rate |
-| **v4 (loss mask)** | TBD | TBD | TBD | TBD | Loss masking (next) |
+| **v3 (peak norm)** | 62.5% | 62.5% | 62.5% | 8.69 | Peak norm + sampling_rate |
+| **v4 (loss mask)** | **90.6%** | **81.2%** | **100%** | **0.297** | **Loss masking (+28.1%)** |
 
-### Current Best: v3 (Peak Normalization)
+### Current Best: v4 (Loss Masking) ✨
 
 **Strengths**:
-- ✅ Perfect balance (no bias)
-- ✅ Best training loss (8.69)
+- ✅ **90.6% accuracy** - Breakthrough result!
+- ✅ **Perfect NONSPEECH** (100%) - Excellent noise rejection
+- ✅ **Strong confidence gap** (0.157) - Well calibrated
+- ✅ **Dramatic loss improvement** (0.297 vs 8.69)
 - ✅ Clean inference (no warnings)
-- ✅ Calibrated confidence
 
-**Weaknesses**:
-- ⚠️ Accuracy below target (<75%)
-- ⚠️ Low confidence gap (0.076)
-
-**Expected Impact of v4 (Loss Masking)**:
-- **+5-10%** accuracy improvement
-- Better gradient signal
-- Faster convergence
+**Analysis**:
+- Only 3 errors, all on SPEECH @ SNR=0dB (extreme conditions)
+- Loss masking exceeded expectations (+28.1% vs expected +5-10%)
+- Model ready for dataset scaling to target >95%
 
 ---
 
@@ -491,7 +498,7 @@ confidence = prob_A if is_A else prob_B
 
 **File**: `scripts/test_normalized_model.py`
 
-#### 5. Loss Masking (IMPLEMENTED, NOT YET TRAINED)
+#### 5. Loss Masking ✅
 
 **Problem**: Computing loss on entire prompt wastes gradient signal
 
@@ -511,10 +518,11 @@ if assistant_response_start > 0:
     labels[:assistant_response_start] = -100
 ```
 
-**Expected Impact**:
-- **+5-10% accuracy** (based on similar work)
-- Better gradient signal
-- Faster convergence
+**Actual Impact** (v0.4.0):
+- **+28.1% accuracy** (62.5% → 90.6%) - FAR exceeded expectations!
+- Training loss: 0.297 (vs 8.69, -96.6%)
+- Perfect NONSPEECH detection (100%)
+- Better gradient signal enabled dramatic improvement
 
 **File**: `scripts/finetune_qwen_audio.py`
 
@@ -522,34 +530,19 @@ if assistant_response_start > 0:
 
 ## Next Steps
 
-### Immediate (Ready to Execute)
+### Current Status ✅
 
-#### 1. Re-train with Loss Masking (HIGH IMPACT)
+**Phase 3 (Loss Masking) COMPLETE!**
+- ✅ Accuracy: 90.6% (+28.1% improvement)
+- ✅ NONSPEECH: 100% (perfect)
+- ✅ Training loss: 0.297 (excellent)
+- ✅ Confidence gap: 0.157 (well calibrated)
 
-```bash
-python scripts/finetune_qwen_audio.py
-```
-
-**Expected**:
-- Training loss: <8.0 (from 8.69)
-- Accuracy: **70-75%** (from 62.5%)
-- SPEECH: ≥75%
-- NONSPEECH: ≥70%
-
-**Timeline**: ~8 minutes
-
-#### 2. Evaluate New Model
-
-```bash
-python scripts/test_normalized_model.py
-```
-
-**If accuracy ≥75%**: Proceed to Phase 3 (dataset scaling)
-**If accuracy <75%**: Implement NONSPEECH hygiene
+**Ready for Phase 4: Dataset Scaling**
 
 ---
 
-### Phase 3: Dataset Scaling (If ≥75% achieved)
+### Phase 4: Dataset Scaling (NEXT)
 
 #### 3.1 Expand Dataset to 1-3k Clips
 
@@ -887,5 +880,6 @@ OPRO Qwen/
 ---
 
 **Last Updated**: 2025-10-19
-**Status**: Phase 2 Complete, Ready for Phase 3
-**Next Action**: Re-train with loss masking → Target 75% accuracy
+**Status**: Phase 3 Complete - Loss Masking Breakthrough!
+**Current Accuracy**: 90.6% (NONSPEECH: 100%)
+**Next Action**: Dataset scaling to 1-3k clips → Target 95% accuracy

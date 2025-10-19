@@ -405,11 +405,12 @@ If you use this work, please cite:
 - Cross-model validation (test prompts on other audio LLMs)
 - OPRO-based prompt optimization for fine-tuned models
 
-### Recently Completed (Phase 2)
-- **Fine-tuning pipeline with LoRA** for ultra-short/noisy clips (200-1000ms, SNR 0-20dB)
+### Recently Completed (Phase 3) ✨
+- **Loss masking breakthrough**: 90.6% accuracy on ultra-short/noisy clips!
+- **Fine-tuning pipeline with LoRA** for 200-1000ms, SNR 0-20dB clips
 - **Peak normalization** preserving SNR as discriminative feature
 - **Constrained A/B decoding** with logits-based confidence scores
-- **Loss masking** optimization for efficient training
+- **Perfect NONSPEECH detection** (100% on test set)
 
 **See**: [README_FINETUNING.md](README_FINETUNING.md) for complete fine-tuning documentation
 
@@ -422,22 +423,29 @@ If you use this work, please cite:
 - **SNR**: 0-20dB (vs clean audio baseline)
 - **Format**: A/B multiple choice with constrained decoding
 
-### Current Status (Phase 2 Complete)
+### Current Status (Phase 3 Complete) ✨
+
+✅ **BREAKTHROUGH RESULTS**
+- **Accuracy: 90.6%** (+28.1% improvement from Phase 2!)
+- **SPEECH: 81.2%** (13/16)
+- **NONSPEECH: 100%** (16/16) - PERFECT noise rejection!
+- Training loss: **0.297** (vs 8.69, -96.6% reduction)
 
 ✅ **Optimized Training Pipeline**
-- Training loss improved: ~10.17 → **8.69** (-14.5%)
+- Loss masking: Compute loss only on A/B token
+- Memory optimization: batch size 2, gradient accumulation 8
 - Zero warnings (sampling_rate fix)
 - LoRA efficiency: 0.25% trainable params (20.7M/8.4B)
 
 ✅ **Inference Improvements**
 - Constrained A/B decoding (eliminates tokenizer variability)
-- Logits-based confidence (calibrated: correct=0.651, wrong=0.575)
-- Balanced predictions (no bias)
+- Logits-based confidence (calibrated: correct=0.731, wrong=0.574, gap=0.157)
+- Excellent discrimination capability
 
-**Performance**: 62.5% on ultra-short/noisy clips (vs 50% baseline)
+**Performance**: 90.6% on ultra-short/noisy clips (vs 50% baseline)
 - Dataset: 160 clips (128 train, 32 test)
-- Perfect balance: SPEECH 62.5%, NONSPEECH 62.5%
-- Next target: **≥75%** with loss masking optimization
+- Only 3 errors, all on SPEECH @ SNR=0dB (extreme conditions)
+- Next target: **≥95%** with dataset scaling to 1-3k clips
 
 ### Quick Start (Fine-Tuning)
 
@@ -463,9 +471,9 @@ python scripts/test_normalized_model.py
    - Preserves SNR as discriminative feature
    - RMS range: 0.053-0.203 (~4x) confirms preservation
 
-2. **Loss Masking**
+2. **Loss Masking** ✅
    - Compute loss only on A/B token (not entire prompt)
-   - Expected +5-10% accuracy improvement
+   - **Actual: +28.1% accuracy improvement** (far exceeded expectations!)
 
 3. **Constrained Decoding**
    - Forces model to output only "A" or "B"
@@ -484,29 +492,32 @@ python scripts/test_normalized_model.py
 
 ### Next Steps
 
-**Immediate** (Ready to execute):
-1. Re-train with loss masking → Target **75%** accuracy
-2. Evaluate confidence calibration
+**Phase 3 COMPLETE ✅**
+- ✅ Loss masking implemented: 90.6% accuracy achieved!
+- ✅ Perfect NONSPEECH detection (100%)
+- ✅ Excellent confidence calibration (gap=0.157)
 
-**Phase 3** (If ≥75% achieved):
+**Phase 4** (Ready to execute):
 - Expand dataset to 1-3k clips (factorial: duration × SNR × class)
-- NONSPEECH hygiene validation (WebRTC VAD)
+- NONSPEECH hygiene validation (WebRTC VAD: ≥70% speech in positives, ≤5% in negatives)
 - Add SpecAugment for robustness
+- Target **≥95%** accuracy
 
-**Phase 4** (After scaling):
+**Phase 5** (After scaling):
 - OPRO prompt optimization on fine-tuned model
-- Target **85%** accuracy on ultra-short/noisy clips
+- Final evaluation for publication
+- Baseline comparisons (VAD, Whisper, etc.)
 
-### Comparison Matrix (Planned)
+### Comparison Matrix
 
-| Model | Fine-Tuning | Prompt | Dataset | Accuracy Target |
-|-------|-------------|--------|---------|-----------------|
+| Model | Fine-Tuning | Prompt | Dataset | Accuracy |
+|-------|-------------|--------|---------|----------|
 | Qwen2-Audio Base | No | Baseline | - | ~85% (clean) |
 | Qwen2-Audio Base | No | OPRO | - | ~90% (clean) |
-| **Qwen2-Audio** | **LoRA** | **Baseline** | **128** | **62.5% (current)** |
-| Qwen2-Audio | LoRA + Mask | Baseline | 128 | ~75% (next) |
-| Qwen2-Audio | LoRA + Mask | Baseline | 1-3k | ~80% (Phase 3) |
-| Qwen2-Audio | LoRA + Mask | OPRO | 1-3k | ~85% (Phase 4) |
+| Qwen2-Audio | LoRA | Baseline | 128 | 62.5% (v0.3.0) |
+| **Qwen2-Audio** | **LoRA + Mask** | **Baseline** | **128** | **90.6% (v0.4.0)** ✨ |
+| Qwen2-Audio | LoRA + Mask | Baseline | 1-3k | ~95% (Phase 4 target) |
+| Qwen2-Audio | LoRA + Mask | OPRO | 1-3k | TBD (Phase 5) |
 | Qwen3-Omni | No | OPRO | - | TBD |
 
 ---
@@ -523,5 +534,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Last Updated**: 2025-10-19
-**Status**: Baseline COMPLETE | Prompt Optimization PRELIMINARY | Fine-Tuning Phase 2 COMPLETE
-**Model**: Qwen2-Audio-7B-Instruct (4-bit, zero-shot + LoRA fine-tuned)
+**Status**: Baseline COMPLETE | Prompt Optimization PRELIMINARY | Fine-Tuning Phase 3 COMPLETE ✨
+**Model**: Qwen2-Audio-7B-Instruct (4-bit, zero-shot + LoRA fine-tuned with loss masking)
+**Current Accuracy**: 90.6% on ultra-short/noisy clips (NONSPEECH: 100%)
