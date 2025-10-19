@@ -40,6 +40,7 @@ class TrainingConfig:
     lora_r: int = 16
     lora_alpha: int = 32
     lora_dropout: float = 0.05
+    lora_target_modules: list = None  # Will default to attention + MLP
 
     # Training
     num_epochs: int = 3
@@ -47,6 +48,7 @@ class TrainingConfig:
     gradient_accumulation_steps: int = 8  # Increased to maintain effective batch size of 16
     learning_rate: float = 2e-4
     warmup_steps: int = 100
+    seed: int = 42  # Random seed for reproducibility
 
     # Paths
     train_csv: Path = project_root / "data" / "processed" / "normalized_clips" / "train_metadata.csv"
@@ -236,7 +238,30 @@ def collate_fn(batch):
 
 
 def main():
+    import argparse
+    import random
+    import numpy as np
+
+    parser = argparse.ArgumentParser(description="Fine-tune Qwen2-Audio")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--output_dir", type=str, help="Custom output directory")
+    parser.add_argument("--lora_r", type=int, default=16, help="LoRA rank")
+    parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha")
+    parser.add_argument("--add_mlp_targets", action="store_true", help="Add MLP layers to LoRA targets")
+    args = parser.parse_args()
+
     config = TrainingConfig()
+    config.seed = args.seed
+    if args.output_dir:
+        config.output_dir = Path(args.output_dir)
+    config.lora_r = args.lora_r
+    config.lora_alpha = args.lora_alpha
+
+    # Set seeds for reproducibility
+    torch.manual_seed(config.seed)
+    torch.cuda.manual_seed_all(config.seed)
+    random.seed(config.seed)
+    np.random.seed(config.seed)
 
     print("=" * 80)
     print("QWEN2-AUDIO FINE-TUNING FOR SPEECH DETECTION")
@@ -255,6 +280,7 @@ def main():
     print(f"  Epochs: {config.num_epochs}")
     print(f"  Batch size: {config.batch_size}")
     print(f"  Learning rate: {config.learning_rate}")
+    print(f"  Random seed: {config.seed}")
 
     # Load processor
     print(f"\nLoading processor...")
@@ -301,10 +327,20 @@ def main():
 
     # Apply LoRA
     print(f"\nApplying LoRA...")
+
+    # Configure target modules
+    target_modules = ["q_proj", "v_proj", "k_proj", "o_proj"]
+    if args.add_mlp_targets:
+        # Add MLP layers for increased capacity
+        target_modules.extend(["gate_proj", "up_proj", "down_proj"])
+        print(f"  Adding MLP targets: gate_proj, up_proj, down_proj")
+
+    print(f"  Target modules: {target_modules}")
+
     lora_config = LoraConfig(
         r=config.lora_r,
         lora_alpha=config.lora_alpha,
-        target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
+        target_modules=target_modules,
         lora_dropout=config.lora_dropout,
         bias="none",
         task_type="CAUSAL_LM",
