@@ -182,6 +182,11 @@ results/
 !results/sprint8_glmm/*.png
 !results/test_set_final/*.parquet
 !results/test_set_final/duration_curves/*.json
+# Keep prompt optimization results
+!results/prompt_opt_local/*.png
+# Keep final publication figures
+!results/figures/
+!results/figures/*.png
 
 # Scratch/temporary documentation
 docs/scratch/
