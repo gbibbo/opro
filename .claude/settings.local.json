@@ -53,7 +53,9 @@
       "Bash(pkill:*)",
       "Bash(pip show:*)",
       "Bash(wmic logicaldisk where \"DeviceID=''C:''\" get FreeSpace,Size)",
-      "Bash(du:*)"
+      "Bash(du:*)",
+      "Bash(for seed in 42 123 456 789 2024)",
+      "Bash(do echo \"=== Seed $seed ===\")"
     ],
     "deny": [],
     "ask": []
