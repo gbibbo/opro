@@ -1,662 +1,223 @@
-# Next Steps - Qwen2-Audio Speech Detection
+# Próximos Pasos Recomendados
 
-**Current Status**: Phase 2 Complete (v0.3.0)
-**Current Performance**: 62.5% accuracy on challenging short/noisy clips
-**Immediate Goal**: ≥75% accuracy with loss masking
-**Final Goal**: ≥85% accuracy with scaled dataset + prompt optimization
+**Fecha**: 2025-10-20
+**Estado Actual**: Multi-seed training completado con varianza cero (96.9% en todos los seeds)
 
 ---
 
-## Quick Action Items (Priority Order)
+## Resumen de Resultados Actuales
 
-### 🔴 IMMEDIATE (Ready to Execute)
+### Multi-Seed Training (Attention-Only, Re-entrenado)
 
-#### 1. Re-train with Loss Masking (HIGH IMPACT - Est. +5-10%)
+**Todos los 5 seeds dieron resultados idénticos:**
 
-**Command**:
+| Seed | Overall | SPEECH | NONSPEECH | Training Loss |
+|------|---------|--------|-----------|---------------|
+| 42   | 96.9%   | 93.8%  | 100.0%    | 0.2860        |
+| 123  | 96.9%   | 93.8%  | 100.0%    | 0.2871        |
+| 456  | 96.9%   | 93.8%  | 100.0%    | 0.2858        |
+| 789  | 96.9%   | 93.8%  | 100.0%    | 0.2858        |
+| 2024 | 96.9%   | 93.8%  | 100.0%    | 0.2839        |
+
+**Estadísticas:**
+- Media: 96.9% ± 0.0%
+- 95% CI: [96.9%, 96.9%]
+- Todos fallan en la misma muestra SPEECH (15/16 correctos)
+- Todos aciertan todas las muestras NONSPEECH (16/16)
+
+### ¿Por qué varianza cero?
+
+**Causa:** Test set muy pequeño (32 muestras)
+- Solo 16 SPEECH, 16 NONSPEECH
+- Solo hay 1-2 "muestras difíciles" en SPEECH
+- Todos los seeds convergen al mismo mínimo local
+- 15/16 SPEECH = 93.8% (siempre)
+
+**Esto NO es un bug** - es una consecuencia natural de:
+1. Dataset pequeño (poca granularidad)
+2. Arquitectura LoRA muy estable (loss masking funciona excelente)
+3. Training muy determinista (mismo proceso → mismo resultado)
+
+### Comparación: Attention-Only vs MLP (Seed 42)
+
+| Config | Overall | SPEECH | NONSPEECH | Params | Tamaño |
+|--------|---------|--------|-----------|--------|--------|
+| **Attention-only (nuevo)** | **96.9%** | 93.8% | **100%** | 20.7M | 84MB |
+| MLP (anterior) | 96.9% | **100%** | 93.8% | 43.9M | 168MB |
+
+**Observación:**
+- **Accuracy total idéntica** (96.9%)
+- **Trade-off:** Attention-only mejor en NONSPEECH, MLP mejor en SPEECH
+- Con solo 32 muestras, imposible distinguir estadísticamente
+
+---
+
+## Plan Recomendado (2 Carriles en Paralelo)
+
+### 🎯 Carril A: Evaluación Robusta (PRIORITARIO)
+
+**Objetivo:** Blindar la evaluación con estadística sólida
+
+#### Paso 1: Ampliar Test Set (150-200 muestras)
+
+**Por qué:**
+- Con 32 muestras: 1 error = 3.1% cambio en accuracy
+- Con 200 muestras: 1 error = 0.5% cambio en accuracy
+- Poder estadístico suficiente para detectar diferencias de 2-3% con p<0.05
+
+**Cómo ejecutar:**
+
 ```bash
-python scripts/finetune_qwen_audio.py
+# 1. Generar metadata con diseño factorial
+python scripts/generate_extended_test_set.py \
+    --voxconverse_csv data/raw/voxconverse_metadata.csv \
+    --musan_csv data/raw/musan_metadata.csv \
+    --output_dir data/processed/extended_test_clips \
+    --n_samples_per_class 100 \
+    --seed 42
+
+# Esto genera:
+# - 200 muestras totales (100 SPEECH, 100 NONSPEECH)
+# - Diseño factorial: 5 duraciones × 5 SNRs × 4 samples/condición
+# - Balanceado: 50% SPEECH, 50% NONSPEECH
+# - Output: data/processed/extended_test_clips/extended_test_metadata.csv
 ```
 
-**What Changed**:
-- Loss now computed only on assistant's A/B token (not entire prompt)
-- Better gradient signal → faster convergence
-- Implementation already in `finetune_qwen_audio.py`
+**Nota:** Necesitarás implementar `scripts/process_extended_test_clips.py` para procesar el audio según la metadata.
 
-**Expected Results**:
-- Training loss: <8.0 (from 8.69)
-- Accuracy: **70-75%** (from 62.5%)
-- SPEECH: ≥75%
-- NONSPEECH: ≥70%
-- Training time: ~8 minutes
+#### Paso 2: Re-evaluar con Metodología Robusta
 
-**Success Criteria**:
-- ✅ No `sampling_rate` warnings during training
-- ✅ Training loss <8.0
-- ✅ Test accuracy ≥70%
-
-**If Success** → Proceed to Phase 3 (Dataset Scaling)
-**If Failure** → Implement NONSPEECH hygiene (Step 2)
-
----
-
-#### 2. Evaluate New Model
-
-**Command**:
 ```bash
-python scripts/test_normalized_model.py
+# Evaluar los mejores modelos con el test ampliado
+python scripts/run_robust_evaluation.py \
+    --models attention_only_seed42 mlp_seed42 baseline \
+    --checkpoints \
+        checkpoints/qwen2_audio_speech_detection_multiseed/seed_42/final \
+        checkpoints/with_mlp_seed_42/final \
+        Qwen/Qwen2-Audio-7B-Instruct \
+    --test_csv data/processed/extended_test_clips/extended_test_metadata.csv \
+    --results_dir results/extended_evaluation
 ```
 
-**What to Check**:
-- Overall accuracy ≥70%
-- Balanced performance (SPEECH ≈ NONSPEECH)
-- Confidence gap ≥0.10 (correct vs wrong)
-- All outputs are "A" or "B" (constrained decoding working)
+#### Paso 3: Decisión Basada en Estadística
 
-**Metrics to Record**:
-```
-Overall: XX/32 = XX.X%
-SPEECH: XX/16 = XX.X%
-NONSPEECH: XX/16 = XX.X%
-Confidence:
-  Overall avg: X.XXX
-  Correct avg: X.XXX
-  Wrong avg: X.XXX
-  Gap: X.XXX
+**Si attention_only ≈ MLP (p ≥ 0.05):**
+- ✅ **Usar attention-only** (20.7M params, 84MB)
+- Razón: Más simple, 2× más pequeño, misma performance
+- Continuar con OPRO sobre attention-only
+
+**Si MLP > attention_only (p < 0.05):**
+- ✅ **Usar MLP** (43.9M params, 168MB)
+- Razón: Mejora estadísticamente significativa
+- Vale la pena el 2× en tamaño por +2-3% accuracy
+
+---
+
+### 🚀 Carril B: OPRO sobre Modelo Fine-Tuned (EN PARALELO)
+
+**Objetivo:** Optimizar el prompt sobre el modelo fine-tuned congelado
+
+**Hipótesis:** Fine-tuning + OPRO > Fine-tuning solo
+
+#### Implementación
+
+Necesitarás crear `scripts/opro_optimize_finetuned.py` (ver [README_ROBUST_EVALUATION.md](README_ROBUST_EVALUATION.md) para detalles).
+
+**Comando de uso:**
+
+```bash
+# Optimizar prompt sobre modelo FT (attention-only seed 42)
+python scripts/opro_optimize_finetuned.py \
+    --checkpoint checkpoints/qwen2_audio_speech_detection_multiseed/seed_42/final \
+    --dev_csv data/processed/normalized_clips/dev_metadata.csv \
+    --test_csv data/processed/extended_test_clips/extended_test_metadata.csv \
+    --n_iterations 50 \
+    --output_dir results/opro_finetuned
 ```
 
 ---
 
-### 🟡 CONDITIONAL (If accuracy <75%)
+## Resumen: ¿Qué Ejecutar Ahora?
 
-#### 3. NONSPEECH Hygiene Validation
+### Orden Sugerido (Prioridad Alta → Baja)
 
-**Goal**: Ensure NONSPEECH clips truly contain no speech
-
-**Implementation**:
-
-1. **Install WebRTC VAD**:
+1. **[URGENTE] Ampliar test set a 200 muestras**
    ```bash
-   pip install webrtcvad
+   python scripts/generate_extended_test_set.py \
+       --n_samples_per_class 100 \
+       --output_dir data/processed/extended_test_clips
    ```
+   - Implementar `process_extended_test_clips.py` (basado en `normalize_clips.py`)
+   - Tiempo estimado: 2-3 horas desarrollo + 30 min procesamiento
 
-2. **Create validation script** (`scripts/validate_nonspeech.py`):
-   ```python
-   import webrtcvad
-   import soundfile as sf
-
-   vad = webrtcvad.Vad(3)  # Aggression mode 3 (most aggressive)
-
-   def compute_speech_activity(audio_path, frame_duration_ms=30):
-       audio, sr = sf.read(audio_path)
-       # Resample to 16kHz if needed
-       # Split into frames
-       # Run VAD on each frame
-       # Return % of frames with speech
-       ...
-
-   # For SPEECH clips
-   activity = compute_speech_activity(clip_path)
-   assert activity >= 0.70, f"SPEECH clip has only {activity:.1%} speech"
-
-   # For NONSPEECH clips
-   activity = compute_speech_activity(clip_path)
-   assert activity <= 0.05, f"NONSPEECH clip has {activity:.1%} speech leakage"
+2. **Re-evaluar con estadística robusta**
+   ```bash
+   python scripts/run_robust_evaluation.py \
+       --models attention_only mlp \
+       --test_csv data/processed/extended_test_clips/extended_test_metadata.csv
    ```
+   - Tiempo estimado: 15-20 min (evaluación con logits es rápida)
 
-3. **Filter dataset**:
-   - Remove NONSPEECH clips with >5% speech activity
-   - Remove SPEECH clips with <70% speech activity
-   - Re-balance and re-split
+3. **Decidir modelo final** (attention-only vs MLP)
+   - Basado en McNemar p-value
+   - Si p ≥ 0.05 → attention-only (más simple)
+   - Si p < 0.05 y MLP mejor → MLP
 
-4. **Re-train** with cleaned dataset
+4. **[OPCIONAL] OPRO sobre FT**
+   - Solo si quieres exprimir últimos 1-2% de accuracy
 
-**Expected Impact**: +5-10% on NONSPEECH class
-
----
-
-### 🟢 PHASE 3 (If accuracy ≥75%)
-
-#### 4. Dataset Scaling (1-3k Clips)
-
-**Goal**: Expand from 160 → 1000-3000 clips with factorial balance
-
-##### 4.1 Design Factorial Matrix
-
-**Dimensions**:
-- **Duration**: [200, 300, 500, 1000] ms (4 levels)
-- **SNR**: [-5, 0, +5, +10, +20] dB (5 levels)
-- **Class**: [SPEECH, NONSPEECH] (2 levels)
-
-**Total cells**: 4 × 5 × 2 = **40 cells**
-
-**Samples per cell**: 25-75 clips
-
-**Total dataset**: 1000-3000 clips
-
-**Split Strategy**:
-- Train: 60% (600-1800 clips)
-- Dev: 20% (200-600 clips)
-- Test: 20% (200-600 clips)
-- **By video/file** to prevent leakage
-
-##### 4.2 Expand NONSPEECH Sources
-
-**Current**: ESC-50 (environmental sounds only)
-
-**Add**:
-1. **Music**: GTZAN, FMA, MusicCaps
-   - 25% of NONSPEECH samples
-   - Various genres (classical, rock, electronic, etc.)
-2. **Animals**: ESC-50 subset (dogs, cats, birds, insects)
-   - 25% of NONSPEECH samples
-3. **Pure Noise**: MUSAN, custom synthetic
-   - 25% of NONSPEECH samples
-   - White noise, pink noise, ambient noise
-4. **Keep ESC-50** environmental sounds
-   - 25% of NONSPEECH samples
-
-**Balance**: Equal representation from each category
-
-##### 4.3 Create Expanded Dataset
-
-**Script**: `scripts/create_large_dataset.py` (to be created)
-
-**Process**:
-1. Load all source datasets
-2. For each cell in factorial matrix:
-   - Sample 25-75 clips matching duration/SNR/class
-   - Apply SNR mixing if needed
-   - Extract center portion (remove padding)
-   - Apply peak normalization
-3. Split by video/file (not random)
-4. Save train/dev/test splits
-
-**Validation**:
-- Each cell has ≥25 samples
-- Each split has balanced representation
-- No leakage between splits
-
-**Timeline**: ~30-60 minutes to create
-
-##### 4.4 Add SpecAugment (Light)
-
-**Implementation** in training script:
-
-```python
-from torchaudio.transforms import FrequencyMasking, TimeMasking
-
-class SpecAugment:
-    def __init__(self, freq_mask_param=10, time_mask_param_ratio=0.05):
-        self.freq_mask = FrequencyMasking(freq_mask_param)
-        self.time_mask_param_ratio = time_mask_param_ratio
-
-    def __call__(self, spec):
-        # Apply frequency masking
-        spec = self.freq_mask(spec)
-
-        # Apply time masking (5% of time dimension)
-        time_mask_param = int(spec.shape[-1] * self.time_mask_param_ratio)
-        time_mask = TimeMasking(time_mask_param)
-        spec = time_mask(spec)
-
-        return spec
-
-# In dataset __getitem__:
-if self.augment and random.random() < 0.5:
-    # Apply to 50% of training samples
-    features = spec_augment(features)
-```
-
-**Parameters** (conservative for short clips):
-- Frequency masking: F=10 (mask up to 10 mel bins)
-- Time masking: T=5% of clip length
-- Probability: 50% during training
-
-**Expected Impact**: +2-5% robustness improvement
-
-##### 4.5 Re-train on Large Dataset
-
-**Configuration**:
-```python
-@dataclass
-class TrainingConfig:
-    # Same LoRA config
-    lora_r: int = 16
-    lora_alpha: int = 32
-
-    # More epochs for larger dataset
-    num_epochs: int = 5  # increased from 3
-
-    # Larger batch for stability
-    batch_size: int = 8  # increased from 4
-    gradient_accumulation_steps: int = 2  # reduced from 4
-    # Effective batch size = 16 (same)
-
-    # Learning rate schedule
-    learning_rate: float = 2e-4
-    warmup_steps: int = 100  # NEW
-    lr_scheduler_type: str = "cosine"  # NEW
-
-    # Data
-    train_csv: Path = project_root / "data" / "processed" / "large_dataset" / "train_metadata.csv"
-    dev_csv: Path = project_root / "data" / "processed" / "large_dataset" / "dev_metadata.csv"  # NEW
-    test_csv: Path = project_root / "data" / "processed" / "large_dataset" / "test_metadata.csv"
-
-    # Evaluation
-    eval_strategy: str = "steps"
-    eval_steps: int = 50  # Evaluate every 50 steps
-```
-
-**Timeline**: ~30-60 minutes (5 epochs × larger dataset)
-
-**Expected Results**:
-- Accuracy: **80-85%** on test set
-- Better generalization across SNR/duration
-- Lower variance in predictions
+5. **[OPCIONAL] Qwen3-Omni baseline**
+   - Solo para comparación académica
 
 ---
 
-### 🔵 PHASE 4 (After Dataset Scaling)
+## Timeline Estimado
 
-#### 5. Prompt Optimization with OPRO
+### Plan Corto (1 día)
+1. ✅ Ampliar test set (2-3 horas)
+2. ✅ Re-evaluar attention vs MLP (20 min)
+3. ✅ Decidir modelo final (lectura de estadísticas)
+4. ✅ Documentar resultados
 
-##### 5.1 Baseline Prompt Testing
+**Entregable:** Modelo validado estadísticamente con 96-97% accuracy ± CI
 
-**Create** `scripts/test_prompts.py`:
+### Plan Medio (2-3 días)
+1. Todo del plan corto
+2. ✅ OPRO sobre modelo FT (6-8 horas training)
+3. ✅ Validación final en test ampliado
+4. ✅ Comparación con Qwen3-Omni
 
-Test 5-10 hand-crafted prompts on dev set:
+**Entregable:** Modelo optimizado con 97-98% accuracy + comparación SOTA
 
-**Prompt 1 (Current)**:
-```
-Choose one:
-A) SPEECH (human voice)
-B) NONSPEECH (music/noise/silence/animals)
+### Plan Completo (1 semana)
+1. Todo del plan medio
+2. ✅ Hyperparameter grid search (LoRA rank, alpha, LR)
+3. ✅ Escalado de dataset (train: 500-1k samples)
+4. ✅ Análisis estratificado (performance por duration, SNR)
+5. ✅ Paper-ready results con tablas y estadísticas
 
-Answer with A or B ONLY.
-```
-
-**Prompt 2 (Explicit)**:
-```
-Listen carefully to this audio clip.
-
-Does it contain human speech?
-
-A) Yes - I hear human voice speaking
-B) No - I hear music, noise, silence, or non-human sounds
-
-Your answer:
-```
-
-**Prompt 3 (Task-Focused)**:
-```
-Task: Detect if human speech is present in this audio.
-
-A) SPEECH detected
-B) NO SPEECH detected
-
-Answer:
-```
-
-**Prompt 4 (Question Format)**:
-```
-Is there human speech in this audio?
-
-A) Yes
-B) No
-
-Your response:
-```
-
-**Prompt 5 (Binary Choice)**:
-```
-Classification task: SPEECH vs NONSPEECH
-
-Listen to the audio.
-
-A = Contains human voice
-B = Does not contain human voice
-
-Select:
-```
-
-**Evaluation**:
-- Run each prompt on full dev set (200-600 samples)
-- Record accuracy, confidence, per-class metrics
-- Select top 2-3 prompts for OPRO
-
-##### 5.2 Implement OPRO Optimizer
-
-**Create** `scripts/opro_optimize_prompt.py`:
-
-```python
-"""OPRO-based prompt optimization for Qwen2-Audio."""
-
-class OPROOptimizer:
-    def __init__(self, model, dev_set, metric="accuracy"):
-        self.model = model
-        self.dev_set = dev_set
-        self.metric = metric
-        self.history = []
-
-    def generate_variants(self, base_prompts, num_variants=10):
-        """Generate prompt variants using meta-prompt."""
-        meta_prompt = f"""
-        Given these prompts for speech detection:
-
-        {base_prompts}
-
-        Generate {num_variants} improved variants that:
-        1. Are clear and unambiguous
-        2. Guide the model to focus on human voice
-        3. Are concise (2-3 sentences max)
-        4. Use A/B format
-
-        Variants:
-        """
-        # Use LLM to generate variants
-        ...
-
-    def evaluate_prompt(self, prompt):
-        """Evaluate prompt on dev set."""
-        correct = 0
-        for sample in self.dev_set:
-            pred = self.model.predict(sample.audio, prompt=prompt)
-            correct += (pred == sample.label)
-        return correct / len(self.dev_set)
-
-    def optimize(self, initial_prompts, num_iterations=5, variants_per_iter=10):
-        """Run OPRO optimization."""
-        current_prompts = initial_prompts
-
-        for iteration in range(num_iterations):
-            print(f"\n=== Iteration {iteration + 1}/{num_iterations} ===")
-
-            # Generate variants
-            variants = self.generate_variants(current_prompts, variants_per_iter)
-
-            # Evaluate all variants
-            results = []
-            for variant in variants:
-                score = self.evaluate_prompt(variant)
-                results.append((variant, score))
-                print(f"Variant score: {score:.3f}")
-
-            # Keep top K
-            results.sort(key=lambda x: x[1], reverse=True)
-            current_prompts = [r[0] for r in results[:3]]
-
-            # Store history
-            self.history.append(results)
-
-            print(f"\nBest prompt (score={results[0][1]:.3f}):")
-            print(results[0][0])
-
-        return results[0][0], results[0][1]
-```
-
-**Usage**:
-```bash
-python scripts/opro_optimize_prompt.py \
-  --model checkpoints/qwen2_audio_speech_detection_normalized/final \
-  --dev-set data/processed/large_dataset/dev_metadata.csv \
-  --initial-prompts prompts/baseline.txt \
-  --num-iterations 5 \
-  --variants-per-iteration 10 \
-  --output prompts/optimized.txt
-```
-
-**Timeline**: ~2-4 hours (depends on dev set size)
-
-**Expected Impact**: +3-5% accuracy improvement
-
-##### 5.3 Final Model Comparison Matrix
-
-**Evaluate all model variants**:
-
-| ID | Model | Fine-Tuning | Prompt | Dataset | Accuracy | Notes |
-|----|-------|-------------|--------|---------|----------|-------|
-| **A1** | Qwen2-Audio Base | No | Baseline | - | ~85% | Normal clips |
-| **A2** | Qwen2-Audio Base | No | OPRO | - | ~90% | Normal clips |
-| **B1** | Qwen2-Audio | LoRA | Baseline | 128 | 62.5% | Current |
-| **B2** | Qwen2-Audio | LoRA + Mask | Baseline | 128 | ~75% | Next |
-| **B3** | Qwen2-Audio | LoRA + Mask | Baseline | 1-3k | ~80% | Phase 3 |
-| **B4** | Qwen2-Audio | LoRA + Mask | OPRO | 1-3k | ~85% | Phase 4 |
-| **C1** | Qwen3-Omni | No | OPRO | - | TBD | Future |
-| **D1** | WebRTC VAD | - | - | - | ~60-70% | Baseline |
-| **D2** | Silero VAD | - | - | - | ~70-80% | Baseline |
-
-**Evaluation Protocol**:
-- Same test set for all models
-- Same constrained A/B decoding
-- Same confidence threshold (learned on dev)
-- Report: accuracy, per-class, per-SNR, per-duration
-- DT50/DT75 (psychometric curves)
+**Entregable:** Publicación científica con resultados sólidos
 
 ---
 
-### 🟣 PHASE 5 (Final Evaluation & Paper)
+## Archivos de Referencia
 
-#### 6. Comprehensive Evaluation
+**Scripts creados (listos para usar):**
+- ✅ `scripts/generate_extended_test_set.py` - Genera metadata de 200 samples
+- ✅ `scripts/run_robust_evaluation.py` - Pipeline completo con bootstrap + McNemar
+- ✅ `scripts/test_with_logit_scoring.py` - Evaluación rápida con logits
+- ✅ `scripts/compare_models_mcnemar.py` - Test estadístico pareado
 
-##### 6.1 Main Results Table
+**Scripts por implementar:**
+- ⏳ `scripts/process_extended_test_clips.py` - Procesar audio según metadata
+- ⏳ `scripts/opro_optimize_finetuned.py` - OPRO sobre modelo congelado
 
-**Metrics**:
-- Overall accuracy
-- SPEECH accuracy
-- NONSPEECH accuracy
-- Precision, Recall, F1 per class
-- Confidence calibration (ECE, MCE)
-
-**Breakdowns**:
-- By SNR: [-5, 0, +5, +10, +20] dB
-- By duration: [200, 300, 500, 1000] ms
-- By NONSPEECH type: [music, animals, noise, environment]
-
-##### 6.2 Psychometric Curves
-
-**DT50 (Detection Threshold 50%)**:
-- SNR at which accuracy = 50%
-- Lower is better (detects at lower SNR)
-
-**DT75 (Detection Threshold 75%)**:
-- SNR at which accuracy = 75%
-
-**Plot**:
-- X-axis: SNR (dB)
-- Y-axis: Accuracy (%)
-- Curves for each model variant
-- Show DT50/DT75 markers
-
-##### 6.3 Latency Analysis
-
-**Components**:
-1. Audio loading: Measure with `time.time()`
-2. Feature extraction: Measure separately
-3. Model forward pass: Measure with `torch.cuda.Event`
-4. Post-processing: Minimal
-
-**Comparison**:
-- Qwen2-Audio (7B): ~300ms
-- Qwen3-Omni: TBD
-- WebRTC VAD: ~10-30ms
-- Silero VAD: ~30-100ms
-
-**Trade-off analysis**:
-- Accuracy vs Latency plot
-- Pareto frontier identification
-
-##### 6.4 Error Analysis
-
-**Failure Modes**:
-1. False Positives (NONSPEECH → SPEECH)
-   - Which NONSPEECH types are confused?
-   - Music with singing-like patterns?
-2. False Negatives (SPEECH → NONSPEECH)
-   - Very short utterances (200ms)?
-   - Low SNR (+0dB or below)?
-   - Specific phonemes/sounds?
-
-**Visualizations**:
-- Confusion matrix
-- Error rate by SNR/duration
-- Audio examples of failures
+**Documentación:**
+- ✅ `README_ROBUST_EVALUATION.md` - Guía completa de metodología estadística
+- ✅ `NEXT_STEPS.md` - Este documento
+- ✅ `RESULTS_MLP_COMPARISON.md` - Resultados MLP vs attention-only
 
 ---
 
-## Timeline Summary
-
-| Phase | Duration | Cumulative | Target Accuracy |
-|-------|----------|------------|-----------------|
-| **Immediate** (Steps 1-2) | ~15 mins | 0.25 hours | 70-75% |
-| **Conditional** (Step 3) | ~2 hours | 2.25 hours | 75-80% |
-| **Phase 3** (Step 4) | ~2-3 hours | 5 hours | 80-85% |
-| **Phase 4** (Step 5) | ~3-5 hours | 10 hours | 85%+ |
-| **Phase 5** (Step 6) | ~5-10 hours | 20 hours | Paper ready |
-
-**Total**: ~20 hours from current state to paper-ready results
-
----
-
-## Decision Tree
-
-```
-Current: 62.5% accuracy
-    ↓
-[1] Re-train with loss masking (~10 mins)
-    ↓
-Test accuracy ≥70%?
-    ├─ YES → [Phase 3] Dataset scaling
-    │         ↓
-    │    Accuracy ≥80%?
-    │         ├─ YES → [Phase 4] Prompt optimization
-    │         │         ↓
-    │         │    Accuracy ≥85%?
-    │         │         ├─ YES → [Phase 5] Final evaluation
-    │         │         └─ NO → Investigate failures
-    │         └─ NO → Add SpecAugment, more data
-    │
-    └─ NO → [3] NONSPEECH hygiene
-              ↓
-         Re-train
-              ↓
-         Accuracy ≥75%?
-              ├─ YES → [Phase 3]
-              └─ NO → Review dataset quality
-```
-
----
-
-## Risk Mitigation
-
-### Risk 1: Loss masking doesn't improve accuracy
-
-**Probability**: Low (this fix is well-established)
-
-**Mitigation**:
-- Verify loss masking is working (check token positions)
-- Try different masking strategies (mask from assistant token, not before)
-- Increase epochs to 5
-
-### Risk 2: Dataset scaling introduces noise
-
-**Probability**: Medium
-
-**Mitigation**:
-- Validate all samples with VAD before inclusion
-- Manual inspection of random 100 samples per class
-- Gradual scaling (500 → 1000 → 2000 → 3000)
-
-### Risk 3: OPRO doesn't find better prompts
-
-**Probability**: Medium
-
-**Mitigation**:
-- Start with strong baselines (hand-crafted prompts)
-- Use larger pool of initial prompts (10-20)
-- Combine with manual prompt engineering
-
-### Risk 4: Model plateaus below target
-
-**Probability**: Low
-
-**Mitigation**:
-- Increase LoRA rank to 32 or 64
-- Try full fine-tuning (not just LoRA)
-- Ensemble multiple models
-- Switch to larger base model (13B or Qwen3-Omni)
-
----
-
-## Success Criteria
-
-### Minimum Viable (for publication):
-- ✅ Overall accuracy ≥75%
-- ✅ SPEECH ≥80%, NONSPEECH ≥70%
-- ✅ Improvement over VAD baselines
-- ✅ Thorough error analysis
-
-### Target (for strong publication):
-- ✅ Overall accuracy ≥85%
-- ✅ Balanced performance across SNR levels
-- ✅ Competitive with state-of-the-art VADs
-- ✅ Demonstrate prompt optimization benefit
-- ✅ Psychometric curves + latency analysis
-
-### Stretch (for top-tier venue):
-- ✅ Overall accuracy ≥90%
-- ✅ Better than Silero VAD at comparable latency
-- ✅ Novel insights from error analysis
-- ✅ Released model + dataset
-- ✅ Reproducible pipeline
-
----
-
-## Resources Needed
-
-### Computational:
-- GPU: 1× RTX 4090 or similar (24GB VRAM)
-- Training time: ~20-30 hours total
-- Storage: ~50GB (datasets + checkpoints)
-
-### Data:
-- VoxConverse: Already have
-- ESC-50: Already have
-- Music datasets: GTZAN (free), FMA (free)
-- MUSAN: Free download
-
-### Software:
-- All libraries already installed
-- WebRTC VAD: `pip install webrtcvad`
-- (Optional) Silero VAD: `pip install silero-vad`
-
----
-
-## Open Questions
-
-1. **Optimal LoRA rank** for this task?
-   - Current: r=16
-   - Try: r=8, 32, 64?
-
-2. **Best prompt format** for A/B constrained decoding?
-   - More explicit options?
-   - Question vs statement format?
-
-3. **Threshold optimization** for confidence scores?
-   - Use dev set to find optimal p(A) threshold
-   - Temperature scaling for calibration?
-
-4. **SpecAugment parameters** for ultra-short clips?
-   - Current: F=10, T=5%
-   - Too aggressive for 200ms clips?
-
-5. **Ensemble strategy**?
-   - Multiple LoRA adapters?
-   - Multiple base models?
-   - Voting or averaging?
-
----
-
-**Last Updated**: 2025-10-19
-**Next Action**: Execute Step 1 (Re-train with loss masking)
-**Expected Completion**: 15 minutes
+**Última actualización:** 2025-10-20
+**Estado:** Infraestructura lista, esperando decisión de usuario
