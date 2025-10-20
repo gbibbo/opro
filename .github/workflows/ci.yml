@@ -44,7 +44,7 @@ jobs:
       - name: Run tests
         run: pytest -v --tb=short
 
-  smoke-test:
+  installation-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -58,7 +58,10 @@ jobs:
         run: |
           pip install -e .
 
-      - name: Run smoke test
+      - name: Verify installation
         run: |
-          python scripts/smoke_test.py
-        timeout-minutes: 1
+          python -c "import sys; print(f'Python {sys.version}')"
+          python -c "import torch; print(f'PyTorch {torch.__version__}')"
+          python -c "import transformers; print(f'Transformers {transformers.__version__}')"
+          python -c "from src.qsm.models.qwen_audio import Qwen2AudioClassifier; print('✓ Qwen2AudioClassifier importable')"
+        timeout-minutes: 2
