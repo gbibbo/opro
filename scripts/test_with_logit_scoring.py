@@ -177,17 +177,35 @@ def evaluate_with_logit_scoring(
     print("\nLoading model...")
     base_model_name = "Qwen/Qwen2-Audio-7B-Instruct"
 
-    model = Qwen2AudioForConditionalGeneration.from_pretrained(
-        base_model_name,
-        device_map="auto",
-        torch_dtype=torch.bfloat16,
-    )
+    # Check if this is a LoRA checkpoint
+    is_lora = (model_path / "adapter_config.json").exists()
 
-    # Load LoRA weights
-    if (model_path / "adapter_config.json").exists():
+    if is_lora:
+        # Load with 4-bit quantization for LoRA (same as training)
+        from transformers import BitsAndBytesConfig
+
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+        )
+
+        model = Qwen2AudioForConditionalGeneration.from_pretrained(
+            base_model_name,
+            quantization_config=bnb_config,
+            device_map="auto",
+        )
+
         print(f"Loading LoRA weights from: {model_path}")
-        model = PeftModel.from_pretrained(model, model_path)
-        model = model.merge_and_unload()  # Merge for faster inference
+        model = PeftModel.from_pretrained(model, str(model_path))
+    else:
+        # Load base model without quantization
+        model = Qwen2AudioForConditionalGeneration.from_pretrained(
+            base_model_name,
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+        )
 
     processor = Qwen2AudioProcessor.from_pretrained(base_model_name)
 
