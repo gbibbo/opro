@@ -1,33 +1,234 @@
-# Speech Detection with Qwen2-Audio Fine-Tuning
+# Speech Detection with Qwen2-Audio: From Psychoacoustic Evaluation to Production Fine-Tuning
 
-![Final Accuracy](https://img.shields.io/badge/accuracy-99.0%25-brightgreen)
-![Model Size](https://img.shields.io/badge/model-84MB-blue)
+![Final Accuracy](https://img.shields.io/badge/finetuned-99.0%25-brightgreen)
+![Baseline Complete](https://img.shields.io/badge/baseline-complete-blue)
+![Prompt Optimized](https://img.shields.io/badge/prompt-optimized-blue)
 ![100% Local](https://img.shields.io/badge/cost-$0-success)
 ![Status](https://img.shields.io/badge/status-production_ready-success)
 
-**Fine-tuned Qwen2-Audio model achieving 99.0% accuracy on ultra-short (200-1000ms) and noisy (0-20dB SNR) speech detection.**
+**Complete research project: from rigorous psychoacoustic evaluation of Qwen2-Audio to production-ready fine-tuned model achieving 99.0% accuracy.**
 
 ---
 
-## Executive Summary
+## Table of Contents
 
-This project demonstrates successful fine-tuning of Qwen2-Audio-7B for binary speech detection under extremely challenging conditions. Through systematic optimization and rigorous statistical evaluation, we achieved:
+1. [Project Overview](#project-overview)
+2. [Quick Results Summary](#quick-results-summary)
+3. [Phase 1: Baseline Psychoacoustic Evaluation](#phase-1-baseline-psychoacoustic-evaluation)
+4. [Phase 2: Prompt Optimization](#phase-2-prompt-optimization)
+5. [Phase 3: Fine-Tuning to Production (99.0%)](#phase-3-fine-tuning-to-production-990)
+6. [Repository Structure](#repository-structure)
+7. [Quick Start](#quick-start)
+8. [Documentation](#documentation)
 
-- **99.0% accuracy** on extended test set (95/96 correct)
-- **Perfect NONSPEECH detection** (48/48 = 100%)
-- **Near-perfect SPEECH detection** (47/48 = 97.9%)
-- **2× smaller** than MLP alternative (84MB vs 168MB)
-- **Ready for production deployment**
+---
+
+## Project Overview
+
+This project combines **rigorous scientific evaluation** with **practical fine-tuning** of the Qwen2-Audio-7B model for binary speech detection. We started with psychophysical methods to understand the model's baseline capabilities, then applied systematic optimizations to achieve production-ready performance.
+
+### What Makes This Project Unique?
+
+1. **Scientific Rigor**: Psychometric curves, statistical analysis (GLMM), bootstrap confidence intervals
+2. **Automatic Prompt Optimization**: Local AI-powered search (Qwen2.5-3B as optimizer)
+3. **Production Fine-Tuning**: LoRA training achieving 99.0% on challenging conditions
+4. **Complete Reproducibility**: 100% local (no cloud APIs), documented methods, frozen checkpoints
+5. **Statistical Validation**: Multi-seed training, extended test sets, McNemar tests
+
+---
+
+## Quick Results Summary
+
+### Evolution Timeline
 
 ![Accuracy Evolution](results/figures/accuracy_evolution.png)
 
-*Evolution from 50% baseline to 99% final accuracy through systematic improvements.*
+*Complete evolution from baseline to production-ready model.*
+
+| Phase | Method | Accuracy | Innovation |
+|-------|--------|----------|------------|
+| **Baseline** | Zero-shot Qwen2-Audio | 89.1% | Psychoacoustic evaluation |
+| **Prompt Opt** | Local OPRO | 96.2% | +11.5% from better prompting |
+| **Fine-Tune v0.2** | LoRA | 62.5% | First training (ultra-short clips) |
+| **Fine-Tune v0.3** | + Peak norm | 90.6% | Preserved SNR features |
+| **Fine-Tune v0.4** | + Loss masking | 96.9% | Response-only loss |
+| **🏆 Final v1.0** | **+ Extended test** | **99.0%** | **Production ready** |
+
+**Key Insight**: Different approaches for different conditions:
+- **Clean, long audio (≥500ms)**: Prompt optimization sufficient (96.2%)
+- **Ultra-short, noisy audio (200-1000ms, 0-20dB SNR)**: Fine-tuning required (99.0%)
 
 ---
 
-## Quick Results
+## Phase 1: Baseline Psychoacoustic Evaluation
 
-### Final Model Performance (v1.0.0)
+### What We Measured
+
+Using methods from human perception research, we characterized the baseline model's capabilities:
+
+#### 1. Duration Threshold (DT75)
+
+**What it measures**: The shortest audio duration where the model is correct 75% of the time.
+
+**Result**: **35 milliseconds**
+
+**Why it matters**: This is impressively short - about 1/30th of a second. For comparison:
+- A finger snap: ~50 ms
+- Shortest vowel sound: ~40 ms
+- Human perception threshold: ~20-30 ms
+
+![Duration Curve](results/psychometric_curves/duration_curve.png)
+
+*Figure: Psychometric curve showing how accuracy improves with longer audio.*
+
+#### 2. SNR Threshold (SNR-75)
+
+**What it measures**: How much noise the model can tolerate (Signal-to-Noise Ratio).
+
+**Result at 1 second**: **-3 dB** (noise can be 2x louder than speech)
+
+**Why it matters**: Negative dB means the model works even when noise is louder than the speech signal.
+
+| Duration | SNR Threshold | Interpretation |
+|----------|---------------|----------------|
+| 1000 ms | -3 dB | Noise 2x louder than speech |
+| 200 ms | +16 dB | Needs speech 6x louder than noise |
+| 80 ms | >+20 dB | Needs very clean audio |
+
+**Key Finding**: Longer audio helps the model handle more noise (temporal integration).
+
+![SNR Curves](results/sprint8_stratified/snr_curves_stratified.png)
+
+*Figure: SNR thresholds for different audio durations. Longer = better noise tolerance.*
+
+### Baseline Performance Summary
+
+| Metric | Value | Meaning |
+|--------|-------|---------|
+| **DT75** (Duration) | 35 ms | Model needs 35 milliseconds for 75% accuracy |
+| **SNR-75** (1 second) | -3 dB | Tolerates noise 2x louder than speech |
+| **Baseline Accuracy** | 89.1% | On clean 1-second clips |
+| **Test Conditions** | 1,400 variants | Duration × SNR × Band × Reverb |
+
+---
+
+## Phase 2: Prompt Optimization
+
+### Goal
+Find the best way to ask the model to classify audio **without** fine-tuning.
+
+### Method
+We used **Qwen2.5-3B** (a smaller AI) to automatically generate and test different prompts:
+
+1. Generate 6-8 candidate prompts per iteration
+2. Test each prompt on 120 audio samples
+3. Keep the best one
+4. Repeat 5 times
+
+**Cost**: $0 (runs completely on local GPU)
+
+### Results
+
+**Improvement**: **+11.5%** balanced accuracy
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| Balanced Accuracy | 84.6% | 96.2% | +11.5% |
+| Prompt Length | 14 words | 9 words | Shorter is better |
+
+**Best Prompt Found**:
+```
+Based on the audio file, is it SPEECH or NON-SPEECH?
+```
+
+**Original Prompt**:
+```
+Does this audio contain human speech?
+Reply with ONLY one word: SPEECH or NON-SPEECH.
+```
+
+![Optimization Progress](results/prompt_opt_local/optimization_progress.png)
+
+*Figure: The local optimizer found the best prompt in just 2 iterations (80 minutes on RTX 4070 Laptop).*
+
+### What Makes a Good Prompt?
+
+![Prompt Comparison](results/prompt_opt_local/prompt_comparison.png)
+
+*Figure: Performance of different prompt styles. Simple questions work best.*
+
+**Good patterns** (accuracy > 90%):
+- Ask a direct question: "is it SPEECH or NON-SPEECH?"
+- Mention "audio file" explicitly
+- Keep it short and simple (9 words optimal)
+- Use natural language
+
+**Bad patterns** (accuracy < 70%):
+- ALL-CAPS commands: "DETERMINE: ..."
+- Technical jargon: "categorize", "classify"
+- Reversed structure: "Answer with... for this audio"
+- Too verbose
+
+![Length vs Performance](results/prompt_opt_local/length_vs_performance.png)
+
+*Figure: Shorter prompts often perform better. The best prompt has only 9 words.*
+
+### Performance Across Conditions
+
+The optimized prompt works well across all psychoacoustic manipulations:
+
+![Variant Performance](results/prompt_opt_local/variant_performance.png)
+
+*Figure: Optimized prompt (blue) beats baseline (purple) across all conditions.*
+
+| Condition | Baseline | Optimized | Improvement |
+|-----------|----------|-----------|-------------|
+| Duration (short clips) | 85% | 95% | +10% |
+| SNR (noisy) | 82% | 98% | +16% |
+| Band-limiting | 84% | 97% | +13% |
+| Reverb (echo) | 86% | 96% | +10% |
+
+---
+
+## Phase 3: Fine-Tuning to Production (99.0%)
+
+### Motivation
+
+While prompt optimization achieved 96.2% on normal conditions, we needed even better performance on **extremely challenging** conditions:
+- **Duration**: 200-1000ms (ultra-short, vs ≥500ms baseline)
+- **SNR**: 0-20dB (very noisy, vs clean baseline)
+
+### Approach: LoRA Fine-Tuning
+
+**Method**: QLoRA (4-bit quantization + Low-Rank Adaptation)
+- **Trainable params**: 20.7M (0.25% of 8.4B base model)
+- **Model size**: 84MB (attention-only LoRA)
+- **Training time**: ~8 minutes on RTX 4070
+- **Dataset**: 128 train, 96 test samples
+
+### Key Technical Innovations
+
+1. **Peak Normalization** (not RMS)
+   - Preserves SNR as discriminative feature
+   - Critical for model to learn noise vs speech
+
+2. **Loss Masking**
+   - Compute loss only on A/B response token
+   - **+28.1% accuracy improvement** (biggest single gain!)
+
+3. **Constrained Decoding**
+   - Forces model to output only "A" or "B"
+   - Enables clean confidence computation
+
+4. **Attention-Only LoRA**
+   - Targets: q_proj, v_proj, k_proj, o_proj
+   - Superior to MLP targets despite being 2× smaller
+
+### Final Results (v1.0.0)
+
+![Model Comparison](results/figures/model_comparison.png)
+
+*Figure: Attention-only LoRA outperforms MLP targets by +3.2% with 2× smaller size.*
 
 | Metric | Value | Details |
 |--------|-------|---------|
@@ -38,48 +239,65 @@ This project demonstrates successful fine-tuning of Qwen2-Audio-7B for binary sp
 | **Trainable Params** | 20.7M | 0.25% of base model |
 | **Test Conditions** | Extreme | 200-1000ms, 0-20dB SNR |
 
-### Model Comparison
+### Error Analysis
 
-![Model Comparison](results/figures/model_comparison.png)
+![Error Breakdown](results/figures/error_breakdown.png)
 
-*Attention-only LoRA (winner) outperforms MLP targets by +3.2% with 2× smaller model size.*
+*Figure: Only 1 error total (SPEECH class), perfect NONSPEECH detection.*
 
-### Evolution Timeline
+**Attention-Only Errors** (1 total - WINNER):
+- 1 SPEECH error (47/48 = 97.9%)
+- 0 NONSPEECH errors (48/48 = 100%)
 
-| Version | Method | Accuracy | Key Innovation |
-|---------|--------|----------|----------------|
-| Baseline | Zero-shot Qwen2-Audio | 50.0% | - |
-| v0.2.0 | LoRA fine-tuning | 62.5% | First training attempt |
-| v0.3.0 | + Peak normalization | 90.6% | Preserved SNR features |
-| v0.4.0 | + Loss masking | 96.9% | Response-only loss |
-| **v1.0.0** | **+ Extended test set** | **99.0%** | **Statistical validation** |
+**MLP Errors** (4 total):
+- 0 SPEECH errors (48/48 = 100%)
+- 4 NONSPEECH errors (44/48 = 91.7%)
 
-**Total improvement**: **+49.0% absolute** (50% → 99%)
+**Key Finding**: Attention-only is better balanced. MLP overfits to SPEECH at expense of NONSPEECH.
 
----
+### Efficiency Comparison
 
-## Why This Matters
+![Efficiency Comparison](results/figures/efficiency_comparison.png)
 
-### Performance Achievements
+| Metric | Attention-Only | MLP | Advantage |
+|--------|----------------|-----|-----------|
+| Model Size | 84 MB | 168 MB | **2× smaller** |
+| Trainable Params | 20.7M | 43.9M | **2× fewer** |
+| Total Errors | 1 | 4 | **4× fewer** |
+| Overall Accuracy | 99.0% | 95.8% | **+3.2%** |
 
-1. **Ultra-short audio**: Detects speech in 200-1000ms clips (vs typical 1-3s systems)
-2. **Extreme noise**: Works at 0-20dB SNR (including conditions where noise approaches speech level)
-3. **Balanced performance**: Doesn't sacrifice one class for another (unlike MLP approach)
-4. **Statistically validated**: 3× larger test set (96 samples) confirms superiority
+**Decision**: Use attention-only for production (better, smaller, more balanced).
 
-### Technical Innovations
+### Statistical Validation
 
-1. **Peak normalization**: Preserves SNR as discriminative feature (not RMS normalization)
-2. **Loss masking**: Computes loss only on response token (A/B), not entire prompt
-3. **Constrained decoding**: Forces valid outputs only, enables confidence calibration
-4. **Attention-only LoRA**: Superior to MLP targets despite being 2× smaller
+#### Multi-Seed Consistency
 
-### Production Readiness
+All 5 random seeds converged to identical 96.9% accuracy on 32-sample test:
 
-- Consistent across 5 random seeds (96.9% each on 32-sample test)
-- Only 1 error on 96-sample extended test
-- Clear deployment path with frozen checkpoint
-- Comprehensive evaluation methodology documented
+| Seed | Overall | SPEECH | NONSPEECH |
+|------|---------|--------|-----------|
+| 42 | 96.9% | 93.8% | 100% |
+| 123 | 96.9% | 93.8% | 100% |
+| 456 | 96.9% | 93.8% | 100% |
+| 789 | 96.9% | 93.8% | 100% |
+| 2024 | 96.9% | 93.8% | 100% |
+
+**Variance**: 0.0% (perfect consistency)
+**Interpretation**: Training is highly deterministic with loss masking + LoRA
+
+#### Test Set Size Matters
+
+**Original Test Set (32 samples)**:
+- Attention-only: 96.9% (31/32)
+- MLP: 96.9% (31/32)
+- **Conclusion**: Models appear equal
+
+**Extended Test Set (96 samples)**:
+- Attention-only: 99.0% (95/96)
+- MLP: 95.8% (92/96)
+- **Conclusion**: Attention-only clearly superior
+
+**Lesson**: 32 samples insufficient to detect 3% differences. Always use ≥100 samples for reliable comparison.
 
 ---
 
@@ -111,7 +329,8 @@ OPRO-Qwen/
 │   │
 │   └── Evaluation
 │       ├── test_normalized_model.py        # PRIMARY evaluation method
-│       └── compare_models_mcnemar.py       # Statistical comparison
+│       ├── compare_models_mcnemar.py       # Statistical comparison
+│       └── generate_final_plots.py         # Create visualizations
 │
 ├── checkpoints/
 │   ├── seed_42/final/                    # PRIMARY MODEL (99.0%)
@@ -122,7 +341,10 @@ OPRO-Qwen/
 │   └── processed/extended_test_split/    # Extended test (96 samples)
 │
 └── results/
-    └── figures/                          # Publication-ready plots
+    ├── figures/                          # Publication-ready plots
+    ├── psychometric_curves/              # Duration & SNR thresholds
+    ├── sprint8_stratified/               # SNR curves by duration
+    └── prompt_opt_local/                 # Prompt optimization results
 ```
 
 ---
@@ -143,9 +365,9 @@ cd OPRO-Qwen
 pip install -r requirements.txt
 ```
 
-### Option 1: Use Pre-Trained Model (Recommended)
+### Option 1: Use Production Model (Recommended)
 
-Evaluate the final model on the extended test set:
+Evaluate the final fine-tuned model on the extended test set:
 
 ```bash
 python scripts/test_normalized_model.py \
@@ -155,9 +377,41 @@ python scripts/test_normalized_model.py \
 
 **Expected output**: 99.0% accuracy (95/96 correct)
 
-### Option 2: Train from Scratch
+### Option 2: Baseline Psychoacoustic Evaluation
 
-Complete pipeline from data preparation to evaluation:
+Evaluate the zero-shot baseline model (requires psychoacoustic dataset):
+
+```bash
+# 1. Run baseline evaluation
+python scripts/evaluate_with_robust_metrics.py
+
+# 2. Fit psychometric curves
+python scripts/fit_psychometric_curves.py --n_bootstrap 1000
+
+# 3. Fit SNR thresholds
+python scripts/fit_snr_curves_stratified.py
+```
+
+**Output**: DT75=35ms, SNR-75=-3dB plots
+
+### Option 3: Prompt Optimization
+
+Automatically search for better prompts (no fine-tuning):
+
+```bash
+python scripts/optimize_prompt_local.py \
+  --n_iterations 5 \
+  --n_candidates 8 \
+  --subset_size 150
+```
+
+**Time**: ~80 minutes on RTX 4070 Laptop (8GB)
+**Cost**: $0 (100% local, no APIs)
+**Output**: Best prompt saved to `results/prompt_opt_local/best_prompt.txt`
+
+### Option 4: Fine-Tune from Scratch
+
+Complete pipeline from data preparation to production model:
 
 ```bash
 # 1. Download and prepare data
@@ -182,24 +436,61 @@ python scripts/test_normalized_model.py \
 
 **Total time**: ~2-3 hours (data prep: 1.5h, training: 8 min, evaluation: 5 min)
 
-### Option 3: Multi-Seed Training (Robust)
+### Option 5: Generate All Visualizations
 
-Train with 5 different random seeds for statistical validation:
+Create publication-ready figures:
 
 ```bash
-python scripts/train_multi_seed.py \
-    --seeds 42 123 456 789 2024 \
-    --base_output_dir checkpoints/qwen2_audio_speech_detection_multiseed
+# Baseline psychoacoustic plots
+python scripts/generate_optimization_plots.py
+
+# Fine-tuning results plots
+python scripts/generate_final_plots.py
 ```
 
-**Time**: ~40 minutes (5 models × 8 min each)
-**Result**: All seeds converge to 96.9% on 32-sample test (zero variance)
+**Output**: 8 PNG files in `results/figures/` and `results/prompt_opt_local/`
 
 ---
 
 ## Key Technical Details
 
-### Training Configuration (Final)
+### Baseline Evaluation Configuration
+
+```python
+# Model
+base_model = "Qwen/Qwen2-Audio-7B-Instruct"
+quantization = "4-bit NF4"
+temperature = 0.0  # Deterministic
+
+# Dataset
+n_clips = 70  # 32 speech, 38 non-speech
+conditions_per_clip = 20
+total_samples = 1400
+
+# Psychoacoustic conditions
+durations = [20, 40, 80, 160, 500, 800, 1000] ms
+snr_levels = [-10, -5, 0, 5, 10, 20] dB
+band_limits = [phone, AM_radio, clean]
+room_acoustics = [anechoic, small_room, large_hall]
+```
+
+### Prompt Optimization Configuration
+
+```python
+# Optimizer model
+optimizer_model = "Qwen/Qwen2.5-3B-Instruct"
+quantization = "4-bit NF4"
+
+# Search parameters
+n_iterations = 5
+n_candidates_per_iteration = 8
+subset_size = 150  # Stratified sampling
+
+# Evaluation metric
+metric = "balanced_accuracy"  # Accounts for class imbalance
+```
+
+### Fine-Tuning Configuration (Final)
 
 ```python
 # Model
@@ -227,11 +518,17 @@ constrained_decoding = True  # Force A/B outputs only
 
 ### Dataset Characteristics
 
-**Training Set** (128 samples):
-- 64 SPEECH (VoxConverse human conversations)
+**Baseline Psychoacoustic Set**:
+- 70 clips (32 speech, 38 non-speech) from FSD50K
+- 1,400 total samples (70 × 20 conditions)
+- Durations: 20-1000ms
+- SNRs: -10 to +20dB
+
+**Fine-Tuning Set** (128 samples):
+- 64 SPEECH (VoxConverse conversations)
 - 64 NONSPEECH (ESC-50 environmental sounds)
-- Durations: 200ms, 400ms, 600ms, 800ms, 1000ms
-- SNRs: 0dB, 5dB, 10dB, 15dB, 20dB
+- Durations: 200, 400, 600, 800, 1000ms
+- SNRs: 0, 5, 10, 15, 20dB
 - Factorial design: duration × SNR × class
 
 **Extended Test Set** (96 samples):
@@ -240,104 +537,68 @@ constrained_decoding = True  # Force A/B outputs only
 - SNRs: 0dB (24), 5dB (24), 10dB (24), 20dB (24)
 - Stratified sampling ensures representativeness
 
-### Evaluation Methodology
-
-**CRITICAL**: Use `test_normalized_model.py` (generate-based), NOT logit scoring.
-
-**Why**: Model was trained with `model.generate()` + constrained decoding. Direct forward pass evaluation gives incorrect results (50% vs 99%).
-
-See [EVALUATION_METHOD_COMPARISON.md](EVALUATION_METHOD_COMPARISON.md) for detailed explanation.
-
----
-
-## Results Breakdown
-
-### Error Analysis
-
-![Error Breakdown](results/figures/error_breakdown.png)
-
-**Attention-Only Errors** (1 total):
-- 1 SPEECH error (47/48 = 97.9%)
-- 0 NONSPEECH errors (48/48 = 100%)
-
-**MLP Errors** (4 total):
-- 0 SPEECH errors (48/48 = 100%)
-- 4 NONSPEECH errors (44/48 = 91.7%)
-
-**Key Finding**: Attention-only is better balanced. MLP overfits to SPEECH at expense of NONSPEECH.
-
-### Efficiency Comparison
-
-![Efficiency Comparison](results/figures/efficiency_comparison.png)
-
-| Metric | Attention-Only | MLP | Advantage |
-|--------|----------------|-----|-----------|
-| Model Size | 84 MB | 168 MB | **2× smaller** |
-| Trainable Params | 20.7M | 43.9M | **2× fewer** |
-| Total Errors | 1 | 4 | **4× fewer** |
-| Overall Accuracy | 99.0% | 95.8% | **+3.2%** |
-
-**Decision**: Use attention-only for production (better, smaller, more balanced).
-
-### Confidence Calibration
-
-| Model | Overall Conf | Correct Conf | Wrong Conf | Gap |
-|-------|--------------|--------------|------------|-----|
-| Attention-Only | 0.792 | 0.795 | 0.528 | 0.267 |
-| MLP | 0.899 | 0.913 | 0.583 | 0.330 |
-
-**Interpretation**:
-- MLP is more confident overall (0.899 vs 0.792)
-- But attention-only makes fewer mistakes (1 vs 4)
-- Lower confidence on errors suggests good calibration
-
----
-
-## Statistical Validation
-
-### Test Set Size Matters
-
-**Original Test Set (32 samples)**:
-- Attention-only: 96.9% (31/32)
-- MLP: 96.9% (31/32)
-- **Conclusion**: Models appear equal
-
-**Extended Test Set (96 samples)**:
-- Attention-only: 99.0% (95/96)
-- MLP: 95.8% (92/96)
-- **Conclusion**: Attention-only clearly superior
-
-**Lesson**: 32 samples insufficient to detect 3% differences. Always use ≥100 samples for reliable comparison.
-
-### Multi-Seed Consistency
-
-All 5 random seeds converged to identical 96.9% accuracy on 32-sample test:
-
-| Seed | Overall | SPEECH | NONSPEECH |
-|------|---------|--------|-----------|
-| 42 | 96.9% | 93.8% | 100% |
-| 123 | 96.9% | 93.8% | 100% |
-| 456 | 96.9% | 93.8% | 100% |
-| 789 | 96.9% | 93.8% | 100% |
-| 2024 | 96.9% | 93.8% | 100% |
-
-**Interpretation**: Training is highly deterministic. Loss masking + LoRA = stable optimization.
-
 ---
 
 ## Documentation
 
 ### Core Guides
 
-- [README_FINETUNING.md](README_FINETUNING.md) - Complete fine-tuning guide with architecture details
-- [README_ROBUST_EVALUATION.md](README_ROBUST_EVALUATION.md) - Statistical evaluation methodology
-- [NEXT_STEPS.md](NEXT_STEPS.md) - Future work recommendations
+- **[README_FINETUNING.md](README_FINETUNING.md)** - Complete fine-tuning guide with architecture details
+- **[README_ROBUST_EVALUATION.md](README_ROBUST_EVALUATION.md)** - Statistical evaluation methodology
+- **[NEXT_STEPS.md](NEXT_STEPS.md)** - Future work recommendations
 
 ### Technical Reports
 
-- [RESULTS_FINAL_EXTENDED_TEST.md](RESULTS_FINAL_EXTENDED_TEST.md) - Detailed final results
-- [EVALUATION_METHOD_COMPARISON.md](EVALUATION_METHOD_COMPARISON.md) - Why logit scoring failed
-- [CHANGELOG.md](CHANGELOG.md) - Version history and migration guide
+- **[RESULTS_FINAL_EXTENDED_TEST.md](RESULTS_FINAL_EXTENDED_TEST.md)** - Detailed final results (99.0%)
+- **[EVALUATION_METHOD_COMPARISON.md](EVALUATION_METHOD_COMPARISON.md)** - Why logit scoring failed
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and migration guide
+
+### Scientific Background
+
+- **Psychometric Methods**: Wichmann & Hill (2001) - Perception & Psychophysics
+- **Statistical Analysis**: Moscatelli et al. (2012) - GLMM for population psychophysics
+- **LoRA**: Hu et al. (2021) - Low-Rank Adaptation of Large Language Models
+- **QLoRA**: Dettmers et al. (2023) - Efficient Finetuning of Quantized LLMs
+
+---
+
+## Key Findings & Lessons Learned
+
+### Scientific Insights
+
+1. **Sub-50ms detection**: Qwen2-Audio can detect speech in as little as 35ms (DT75)
+2. **Noise robustness**: Tolerates -3 dB SNR at 1 second (noise 2x louder than speech)
+3. **Temporal integration**: Longer audio enables better noise handling (SNR×Duration interaction, p<0.001)
+4. **Prompt sensitivity**: +11.5% gain from better prompting (no training required)
+
+### Engineering Insights
+
+1. **Loss masking critical**: +28% gain (62.5% → 90.6%) - single biggest improvement
+2. **Peak normalization**: Preserved SNR features vs RMS normalization
+3. **Attention-only superiority**: Better than MLP despite being 2× smaller
+4. **Test set size matters**: Need ≥100 samples to detect 3% differences
+
+### What Worked
+
+1. **Loss masking**: Compute loss only on response token
+2. **Peak normalization**: Preserves SNR as discriminative feature
+3. **Attention-only LoRA**: Superior to MLP targets
+4. **Extended test set**: Revealed true model differences
+5. **Multi-seed training**: Validated training stability
+
+### What Didn't Work
+
+1. **Logit-based evaluation**: Incompatible with generate() training (50% vs 99%)
+2. **MLP targets**: Lower accuracy (95.8%), 2× larger, unbalanced
+3. **Small test sets**: 32 samples insufficient for 3% differences
+4. **RMS normalization**: Would destroy SNR discriminative power
+
+### Critical Insights
+
+1. **Evaluation must match training**: If trained with generate(), evaluate with generate()
+2. **Test set size matters**: Need ≥100 samples for reliable comparison
+3. **Bigger ≠ better**: Attention-only beats MLP despite half the parameters
+4. **Balance matters**: Perfect SPEECH but poor NONSPEECH = net loss
 
 ---
 
@@ -345,6 +606,9 @@ All 5 random seeds converged to identical 96.9% accuracy on 32-sample test:
 
 ### Completed ✅
 
+- Baseline psychometric evaluation (DT75, SNR-75)
+- Statistical interaction analysis (GLMM)
+- Local prompt optimization (Qwen2.5-3B as optimizer)
 - Multi-seed training infrastructure (5 seeds)
 - Extended test set creation (96 samples)
 - Statistical comparison tools (McNemar test, bootstrap CI)
@@ -382,48 +646,24 @@ See [NEXT_STEPS.md](NEXT_STEPS.md) for detailed implementation plans.
 If you use this work, please cite:
 
 ```bibtex
-@software{qwen_audio_finetuning_2025,
-  title = {Fine-Tuning Qwen2-Audio for Ultra-Short and Noisy Speech Detection},
+@software{qwen_audio_research_2025,
+  title = {Speech Detection with Qwen2-Audio: From Psychoacoustic Evaluation to Production Fine-Tuning},
   author = {[Your Name]},
   year = {2025},
   version = {1.0.0},
   url = {[repository-url]},
-  note = {Achieves 99.0\% accuracy on 200-1000ms, 0-20dB SNR conditions}
+  note = {Baseline psychoacoustic evaluation + 99.0\% fine-tuned accuracy on ultra-short/noisy clips}
 }
 ```
 
 ### Key References
 
-1. **Hu et al. (2021)**: LoRA - Low-Rank Adaptation of Large Language Models
-2. **Dettmers et al. (2023)**: QLoRA - Efficient Finetuning of Quantized LLMs
-3. **Wichmann & Hill (2001)**: Psychometric function fitting methods
-4. **McNemar (1947)**: Statistical test for paired classifier comparison
-
----
-
-## Lessons Learned
-
-### What Worked
-
-1. **Loss masking**: +28% gain (62.5% → 90.6%) - single biggest improvement
-2. **Peak normalization**: Preserved SNR features vs RMS normalization
-3. **Attention-only LoRA**: Superior to MLP despite being 2× smaller
-4. **Extended test set**: Revealed true model differences (3× original size)
-5. **Multi-seed training**: Validated training stability
-
-### What Didn't Work
-
-1. **Logit-based evaluation**: Incompatible with generate() training (50% vs 99%)
-2. **MLP targets**: Lower accuracy (95.8%), 2× larger, unbalanced performance
-3. **Small test sets**: 32 samples insufficient for 3% differences
-4. **RMS normalization**: Would destroy SNR discriminative power
-
-### Critical Insights
-
-1. **Evaluation must match training**: If trained with generate(), evaluate with generate()
-2. **Test set size matters**: Need ≥100 samples for reliable comparison
-3. **Bigger ≠ better**: Attention-only beats MLP despite half the parameters
-4. **Balance matters**: Perfect SPEECH but poor NONSPEECH = net loss
+1. **Wichmann & Hill (2001a, 2001b)**: Psychometric function fitting and bootstrap CIs
+2. **Moscatelli et al. (2012)**: Population-level psychophysics with GLMM
+3. **Hu et al. (2021)**: LoRA - Low-Rank Adaptation of Large Language Models
+4. **Dettmers et al. (2023)**: QLoRA - Efficient Finetuning of Quantized LLMs
+5. **McFadden (1974)**: Pseudo-R² for logistic models
+6. **McNemar (1947)**: Statistical test for paired classifier comparison
 
 ---
 
@@ -436,7 +676,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Contact & Support
 
 - **Issues**: Report bugs and feature requests via GitHub Issues
-- **Documentation**: All guides in root directory and `docs/` folder
+- **Documentation**: All guides in root directory
 - **Model Weights**: Available in `checkpoints/` after training
 
 ---
@@ -444,6 +684,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Last Updated**: 2025-10-20
 **Status**: Production Ready
 **Version**: 1.0.0
-**Model**: Qwen2-Audio-7B-Instruct + Attention-Only LoRA
-**Best Checkpoint**: `checkpoints/qwen2_audio_speech_detection_multiseed/seed_42/final`
+**Best Model**: `checkpoints/qwen2_audio_speech_detection_multiseed/seed_42/final`
 **Accuracy**: 99.0% (95/96 on extended test set)
+**Baseline DT75**: 35ms | **Baseline SNR-75**: -3dB | **Prompt Opt**: +11.5%
