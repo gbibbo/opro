@@ -121,6 +121,9 @@ def main():
     df = pd.read_csv(args.metadata_csv)
     print(f"Found {len(df)} entries\n")
 
+    # Determine label column
+    label_col = 'ground_truth' if 'ground_truth' in df.columns else 'label'
+
     # Check each audio file
     results = []
     issue_counts = defaultdict(int)
@@ -145,13 +148,13 @@ def main():
             all_issues.append({
                 'audio_path': audio_path,
                 'clip_id': row['clip_id'],
-                'label': row['label'],
+                'label': row[label_col],
                 **result['issues']
             })
 
         results.append({
             'clip_id': row['clip_id'],
-            'label': row['label'],
+            'label': row[label_col],
             'audio_path': audio_path,
             **{k: v for k, v in result.items() if k != 'issues'}
         })

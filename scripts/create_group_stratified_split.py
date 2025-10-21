@@ -44,7 +44,7 @@ def stratified_group_split(df, test_size=0.2, random_state=42):
     5. Stratification is approximate (by group label, not exact row counts)
 
     Args:
-        df: DataFrame with columns [clip_id, label, ...]
+        df: DataFrame with columns [clip_id, ground_truth, ...]
         test_size: Fraction for test set (default 0.2 = 80/20 split)
         random_state: Random seed for reproducibility
 
@@ -55,8 +55,11 @@ def stratified_group_split(df, test_size=0.2, random_state=42):
     df = df.copy()
     df['group_id'] = df['clip_id'].apply(extract_base_clip_id)
 
+    # Use 'ground_truth' column (not 'label')
+    label_col = 'ground_truth' if 'ground_truth' in df.columns else 'label'
+
     # Assign each group to a stratum based on majority label
-    group_labels = df.groupby('group_id')['label'].agg(lambda x: x.mode()[0])
+    group_labels = df.groupby('group_id')[label_col].agg(lambda x: x.mode()[0])
     df['group_label'] = df['group_id'].map(group_labels)
 
     # Get unique groups per stratum
@@ -125,6 +128,9 @@ def verify_no_leakage(train_df, test_df):
 
 def print_split_statistics(train_df, test_df):
     """Print detailed statistics about the split."""
+    # Determine label column
+    label_col = 'ground_truth' if 'ground_truth' in train_df.columns else 'label'
+
     print(f"\n=== Split Statistics ===")
     print(f"\nDataset sizes:")
     print(f"  Train: {len(train_df)} samples")
@@ -132,22 +138,22 @@ def print_split_statistics(train_df, test_df):
     print(f"  Total: {len(train_df) + len(test_df)} samples")
 
     print(f"\nClass distribution (Train):")
-    train_counts = train_df['label'].value_counts()
+    train_counts = train_df[label_col].value_counts()
     for label, count in train_counts.items():
         print(f"  {label}: {count} ({count/len(train_df)*100:.1f}%)")
 
     print(f"\nClass distribution (Test):")
-    test_counts = test_df['label'].value_counts()
+    test_counts = test_df[label_col].value_counts()
     for label, count in test_counts.items():
         print(f"  {label}: {count} ({count/len(test_df)*100:.1f}%)")
 
     # Duration × SNR distribution
     print(f"\nTrain duration × SNR distribution:")
-    train_variant_counts = train_df.groupby(['duration_ms', 'snr_db', 'label']).size()
+    train_variant_counts = train_df.groupby(['duration_ms', 'snr_db', label_col]).size()
     print(train_variant_counts.to_string())
 
     print(f"\nTest duration × SNR distribution:")
-    test_variant_counts = test_df.groupby(['duration_ms', 'snr_db', 'label']).size()
+    test_variant_counts = test_df.groupby(['duration_ms', 'snr_db', label_col]).size()
     print(test_variant_counts.to_string())
 
 

@@ -189,6 +189,9 @@ def main():
     test_df = pd.read_csv(args.test_csv)
     print(f"Test samples: {len(test_df)}")
 
+    # Determine label column
+    label_col = 'ground_truth' if 'ground_truth' in test_df.columns else 'label'
+
     # Label mapping
     label_map = {'SPEECH': 'A', 'NONSPEECH': 'B'}
 
@@ -200,7 +203,7 @@ def main():
     print(f"\nEvaluating with temperature = {args.temperature}...")
     for idx, row in tqdm(test_df.iterrows(), total=len(test_df)):
         audio_path = row['audio_path']
-        ground_truth = row['label']
+        ground_truth = row[label_col]
         ground_truth_token = label_map[ground_truth]
 
         result = evaluate_sample_logits(
