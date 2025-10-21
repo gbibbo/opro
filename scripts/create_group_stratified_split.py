@@ -122,7 +122,7 @@ def verify_no_leakage(train_df, test_df):
         print(f"Examples: {list(overlap)[:5]}")
         return False
     else:
-        print("✓ No leakage detected - all clip_ids are unique to train or test")
+        print("OK: No leakage detected - all clip_ids are unique to train or test")
         return True
 
 
@@ -222,10 +222,10 @@ def main():
     print(f"Test: {test_path} ({len(test_df)} samples)")
 
     if not no_leakage:
-        print("\n⚠️  WARNING: Data leakage detected! Check the split logic.")
+        print("\nWARNING: Data leakage detected! Check the split logic.")
         exit(1)
     else:
-        print("\n✓ Split created successfully with no data leakage!")
+        print("\nSUCCESS: Split created successfully with no data leakage!")
 
 
 if __name__ == "__main__":
