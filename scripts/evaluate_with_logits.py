@@ -165,11 +165,22 @@ def main():
     print(f"\nLoading model from {args.checkpoint}")
     base_model_id = "Qwen/Qwen2-Audio-7B-Instruct"
 
+    from transformers import BitsAndBytesConfig
+
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
+        llm_int8_enable_fp32_cpu_offload=True,
+    )
+
     model = Qwen2AudioForConditionalGeneration.from_pretrained(
         base_model_id,
-        torch_dtype=torch.float16,
+        quantization_config=bnb_config,
         device_map="auto",
-        trust_remote_code=True
+        trust_remote_code=True,
+        low_cpu_mem_usage=True,
     )
 
     # Load LoRA adapter

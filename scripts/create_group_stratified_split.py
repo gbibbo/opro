@@ -20,15 +20,34 @@ from collections import Counter
 
 def extract_base_clip_id(clip_id: str) -> str:
     """
-    Extract the base clip ID (without variant suffix).
+    Extract the base clip ID (without time segment and duration suffix).
 
     Examples:
-        '1-68734-A-34_1000ms_075' -> '1-68734-A-34_1000ms_075'
-        'voxconverse_afjiv_42.120_1000ms' -> 'voxconverse_afjiv_42.120_1000ms'
+        '1-68734-A-34_1000ms_075' -> '1-68734-A-34'
+        'voxconverse_afjiv_42.120_1000ms' -> 'voxconverse_afjiv'
+        '1-51805-C-33_1000ms_039' -> '1-51805-C-33'
 
-    The base clip_id is already the grouping key - all variants of the same
-    source clip will have different original_variant values but same clip_id.
+    This ensures that different time segments from the same source file
+    (e.g., voxconverse_afjiv_35.680 and voxconverse_afjiv_42.120) are
+    grouped together to prevent data leakage.
     """
+    # For voxconverse: remove time segment (e.g., _42.120_1000ms)
+    if clip_id.startswith('voxconverse_'):
+        # Format: voxconverse_SPEAKER_TIME_DURATION
+        # Extract: voxconverse_SPEAKER
+        parts = clip_id.split('_')
+        if len(parts) >= 2:
+            return f"{parts[0]}_{parts[1]}"  # voxconverse_SPEAKER
+
+    # For ESC-50: remove duration suffix (e.g., _1000ms_039)
+    # Format: 1-68734-A-34_1000ms_075
+    # Extract: 1-68734-A-34
+    if '_1000ms_' in clip_id or '_200ms_' in clip_id:
+        parts = clip_id.rsplit('_', 2)
+        if len(parts) == 3:
+            return parts[0]
+
+    # Fallback: return as-is
     return clip_id
 
 

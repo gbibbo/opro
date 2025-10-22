@@ -248,8 +248,8 @@ def main():
     print(f"  {args.model_A_name}: {len(df_A)} predictions")
     print(f"  {args.model_B_name}: {len(df_B)} predictions")
 
-    # Ensure same order (merge on clip_id)
-    merged = df_A.merge(df_B, on='clip_id', suffixes=('_A', '_B'))
+    # Ensure same order (merge on clip_id AND audio_path to handle variants)
+    merged = df_A.merge(df_B, on=['clip_id', 'audio_path'], suffixes=('_A', '_B'))
 
     if len(merged) != len(df_A) or len(merged) != len(df_B):
         print(f"\n⚠️  WARNING: Predictions don't match perfectly!")
@@ -257,10 +257,23 @@ def main():
         print(f"  Model B: {len(df_B)} samples")
         print(f"  Matched: {len(merged)} samples")
 
-    # Extract predictions
+    # Extract predictions using 'correct' column (already computed)
+    # Convert boolean correct to predictions that match ground_truth
     ground_truth = merged['ground_truth_A'].values  # Should be same for both
-    predictions_A = merged['prediction_A'].values
-    predictions_B = merged['prediction_B'].values
+
+    # Create predictions from correct column: if correct, pred=gt, else pred=opposite
+    def make_predictions(ground_truth, correct):
+        preds = []
+        for gt, is_correct in zip(ground_truth, correct):
+            if is_correct:
+                preds.append(gt)
+            else:
+                # Wrong prediction = opposite class
+                preds.append('NONSPEECH' if gt == 'SPEECH' else 'SPEECH')
+        return np.array(preds)
+
+    predictions_A = make_predictions(ground_truth, merged['correct_A'].values)
+    predictions_B = make_predictions(ground_truth, merged['correct_B'].values)
     labels = merged['clip_id'].values
 
     # Verify ground truth matches
