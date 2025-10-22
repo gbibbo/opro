@@ -65,7 +65,7 @@ def get_ab_token_ids(tokenizer):
     return ids_A, ids_B
 
 
-def evaluate_sample_logits(model, processor, audio_path, ids_A, ids_B, temperature=1.0):
+def evaluate_sample_logits(model, processor, audio_path, ids_A, ids_B, temperature=1.0, user_prompt=None):
     """
     Evaluate a single sample using direct logits (no generate).
 
@@ -76,6 +76,7 @@ def evaluate_sample_logits(model, processor, audio_path, ids_A, ids_B, temperatu
         ids_A: List of token IDs for 'A'
         ids_B: List of token IDs for 'B'
         temperature: Temperature for scaling logits (default 1.0 = no scaling)
+        user_prompt: Custom prompt text (default: standard A/B prompt)
 
     Returns:
         dict with prediction, confidence, and raw logits
@@ -90,13 +91,17 @@ def evaluate_sample_logits(model, processor, audio_path, ids_A, ids_B, temperatu
         resampler = T.Resample(orig_freq=sr, new_freq=target_sr)
         audio = resampler(torch.tensor(audio)).numpy()
 
+    # Use custom prompt or default
+    if user_prompt is None:
+        user_prompt = "Is this audio SPEECH (A) or NON-SPEECH (B)? Answer with a single letter:"
+
     # Create prompt
     conversation = [
         {
             "role": "user",
             "content": [
                 {"type": "audio", "audio_url": "placeholder"},
-                {"type": "text", "text": "Is this audio SPEECH (A) or NON-SPEECH (B)? Answer with a single letter:"}
+                {"type": "text", "text": user_prompt}
             ]
         }
     ]
@@ -178,6 +183,12 @@ def main():
         help="Temperature for logit scaling (1.0 = no scaling)"
     )
     parser.add_argument(
+        "--prompt",
+        type=str,
+        default=None,
+        help="Custom prompt text (default: standard A/B prompt)"
+    )
+    parser.add_argument(
         "--output_csv",
         type=str,
         default=None,
@@ -241,6 +252,8 @@ def main():
     total = 0
 
     print(f"\nEvaluating with temperature = {args.temperature}...")
+    if args.prompt:
+        print(f"Using custom prompt: {args.prompt[:80]}..." if len(args.prompt) > 80 else f"Using custom prompt: {args.prompt}")
     for idx, row in tqdm(test_df.iterrows(), total=len(test_df)):
         audio_path = row['audio_path']
         ground_truth = row[label_col]
@@ -249,7 +262,8 @@ def main():
         result = evaluate_sample_logits(
             model, processor, audio_path,
             ids_A, ids_B,
-            temperature=args.temperature
+            temperature=args.temperature,
+            user_prompt=args.prompt
         )
 
         is_correct = (result['prediction'] == ground_truth_token)
@@ -332,7 +346,7 @@ def main():
         print(f"\nDetailed predictions saved to: {args.output_csv}")
 
     print(f"\n{'='*60}")
-    print(f"✓ Evaluation complete!")
+    print(f"[DONE] Evaluation complete!")
     print(f"{'='*60}\n")
 
 

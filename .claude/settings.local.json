@@ -56,7 +56,12 @@
       "Bash(du:*)",
       "Bash(for seed in 42 123 456 789 2024)",
       "Bash(do echo \"=== Seed $seed ===\")",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash([ -f NEXT_STEPS.md ])",
+      "Bash(results/baselines/silero_vad_predictions.csv )",
+      "Bash(results/prompt_opt_local/test_best_prompt_seed42.csv )",
+      "Bash(\"Silero VAD (baseline)\" )",
+      "Bash(\"Qwen2-Audio + LoRA + Optimized Prompt\" )"
     ],
     "deny": [],
     "ask": []
