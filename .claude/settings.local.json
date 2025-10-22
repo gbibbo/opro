@@ -55,7 +55,8 @@
       "Bash(wmic logicaldisk where \"DeviceID=''C:''\" get FreeSpace,Size)",
       "Bash(du:*)",
       "Bash(for seed in 42 123 456 789 2024)",
-      "Bash(do echo \"=== Seed $seed ===\")"
+      "Bash(do echo \"=== Seed $seed ===\")",
+      "Bash(dir:*)"
     ],
     "deny": [],
     "ask": []

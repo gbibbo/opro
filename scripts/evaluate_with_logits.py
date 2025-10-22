@@ -28,13 +28,39 @@ from peft import PeftModel
 
 
 def get_ab_token_ids(tokenizer):
-    """Get all token IDs that represent 'A' or 'B'."""
-    # Tokenize 'A' and 'B' to get their token IDs
-    ids_A = tokenizer.encode('A', add_special_tokens=False)
-    ids_B = tokenizer.encode('B', add_special_tokens=False)
+    """
+    Get all token IDs that represent 'A' or 'B'.
 
-    print(f"Token IDs for 'A': {ids_A}")
-    print(f"Token IDs for 'B': {ids_B}")
+    Important: Handles both variants (with and without leading space)
+    to avoid tokenization bias. Qwen tokenizer may produce "A" or " A"
+    depending on context.
+
+    Returns:
+        ids_A, ids_B: Lists of token IDs (may contain multiple variants)
+    """
+    # Tokenize 'A' and 'B' with and without leading space
+    ids_A = []
+    ids_B = []
+
+    # Variant 1: No space
+    ids_A.extend(tokenizer.encode('A', add_special_tokens=False))
+    ids_B.extend(tokenizer.encode('B', add_special_tokens=False))
+
+    # Variant 2: Leading space
+    ids_A_space = tokenizer.encode(' A', add_special_tokens=False)
+    ids_B_space = tokenizer.encode(' B', add_special_tokens=False)
+
+    # Add space variants (avoiding duplicates)
+    for id_val in ids_A_space:
+        if id_val not in ids_A:
+            ids_A.append(id_val)
+
+    for id_val in ids_B_space:
+        if id_val not in ids_B:
+            ids_B.append(id_val)
+
+    print(f"Token IDs for 'A' (including ' A'): {ids_A}")
+    print(f"Token IDs for 'B' (including ' B'): {ids_B}")
 
     return ids_A, ids_B
 
@@ -95,18 +121,21 @@ def evaluate_sample_logits(model, processor, audio_path, ids_A, ids_B, temperatu
     logits = outputs.logits[0, -1, :]  # Last position
 
     # Extract logits for A and B tokens
-    logits_A = logits[ids_A]  # Could be multiple tokens
+    logits_A = logits[ids_A]  # Could be multiple tokens (e.g., "A" and " A")
     logits_B = logits[ids_B]
 
     # Apply temperature scaling
     logits_A = logits_A / temperature
     logits_B = logits_B / temperature
 
-    # Aggregate if multiple tokens per option (take max)
-    logit_A = logits_A.max().item()
-    logit_B = logits_B.max().item()
+    # Aggregate multiple token variants using logsumexp (sum probabilities)
+    # This is more robust than max() for handling tokenization variants
+    # logsumexp([a,b]) ≈ log(exp(a) + exp(b)) = log(p_A + p_A_space)
+    logit_A = torch.logsumexp(logits_A, dim=0).item()
+    logit_B = torch.logsumexp(logits_B, dim=0).item()
 
     # Compute probabilities using softmax over {A, B}
+    # After logsumexp, these represent the total probability mass for each option
     logit_diff = logit_A - logit_B
     prob_A = torch.sigmoid(torch.tensor(logit_diff)).item()
     prob_B = 1.0 - prob_A

@@ -1,8 +1,8 @@
 # Git Push Summary - Data Leakage Correction (v1.1.0)
 
-**Date**: 2025-10-21
+**Date**: 2025-10-22
 **Type**: Critical Update - Scientific Integrity
-**Version**: 1.1.0 (Post-Correction)
+**Version**: 1.1.0 (Post-Correction - Multi-Seed Validated)
 
 ---
 
@@ -110,6 +110,10 @@ Discovered and corrected data leakage in original train/test split. Updated repo
 - `ABLATION_EXECUTION_PLAN.md`
 - `VALIDATION_GUIDE.md`
 
+### Added (Root - Validation Results)
+- `MULTI_SEED_RESULTS.txt` - Aggregated results across seeds
+- `MULTI_SEED_VALIDATION_COMPLETE.md` - Complete validation report with statistical analysis
+
 ### Added (scripts/)
 - `audit_split_leakage.py`
 - `create_group_stratified_split.py`
@@ -156,31 +160,68 @@ git add scripts/run_ablation_sweep.py
 git add data/processed/grouped_split/train_metadata.csv
 git add data/processed/grouped_split/test_metadata.csv
 
+# Add validation results
+git add MULTI_SEED_RESULTS.txt
+git add MULTI_SEED_VALIDATION_COMPLETE.md
+git add COMPREHENSIVE_ANALYSIS_SUMMARY.md
+git add VALIDATION_STATUS_FINAL.md
+
 # Add results (small files)
 git add results/no_leakage_v2_predictions.csv
 git add results/ablations/LORA_attn_mlp_seed42.csv
+git add results/ablations/LORA_attn_mlp_seed123.csv
+git add results/ablations/LORA_attn_only_seed123.csv
+git add results/ablations/LORA_attn_only_seed456.csv
+git add results/statistical_comparison_seed123.txt
+
+# Add per-condition analysis results
+git add results/per_condition_analysis/LORA_attn_mlp_seed42/per_condition_metrics.csv
+git add results/per_condition_analysis/LORA_attn_mlp_seed42/duration_comparison.png
+git add results/per_condition_analysis/LORA_attn_mlp_seed42/snr_comparison.png
+git add results/per_condition_analysis/LORA_attn_mlp_seed42/duration_snr_heatmap.png
+
+# Add calibration results
+git add results/calibration/optimal_temperature_mlp_seed42.txt
+git add results/calibration/reliability_diagram_mlp_seed42.png
+
+# Add new analysis script
+git add scripts/analyze_per_condition.py
 
 # Commit with detailed message
 git commit -m "fix: Correct data leakage in train/test split (v1.1.0)
 
-CRITICAL UPDATE: Scientific Integrity
+CRITICAL UPDATE: Scientific Integrity (Multi-Seed + Per-Condition Analysis)
 
 Discovered and corrected data leakage in original train/test split where
 same speakers/sounds appeared in both train and test with different variants.
 
 Changes:
 - Implemented GroupShuffleSplit to prevent leakage (0 overlap verified)
-- Updated README with transparent reporting of issue and fix
-- Corrected results: 83.3% (honest) vs 99.0% (inflated by leakage)
-- Added complete validation infrastructure (8 new scripts)
-- Added comprehensive documentation (5 new guides)
+- Updated README with transparent reporting, complete citations, and reproducibility details
+- Corrected results: 83.3% (honest, multi-seed validated) vs 99.0% (inflated by leakage)
+- Added complete validation infrastructure (9 new scripts)
+- Added comprehensive documentation (7 new guides)
+- Multi-seed validation: Perfect consistency across seeds (0.0% variance)
+- Statistical comparison: McNemar test + Bootstrap CI (10k resamples)
+- Per-condition analysis: SNR breakdown reveals 0dB as critical challenge for SPEECH
+- Calibration analysis: ECE, Brier score, reliability diagrams (T_opt = 10.0)
+- Fixed Unicode encoding issues in comparison scripts for Windows compatibility
 
-Key Insight: Dataset scale (only 3 SPEECH speakers) is the limitation,
-not model architecture. With 50+ speakers, expect 90-95% accuracy.
+Key Findings:
+- Attention+MLP: 83.3% ± 0.0% (50.0% SPEECH, 100% NONSPEECH)
+- Attention-only: 79.2% ± 0.0% (37.5% SPEECH, 100% NONSPEECH)
+- MLP provides +12.5% SPEECH improvement with perfect cross-seed consistency
+- NONSPEECH: 100% robust across all SNR levels (0/5/10/20 dB)
+- SPEECH: 0% at 0dB, 100% at 10dB (SNR-sensitive, expected with noisy speech)
+- Calibration: Model extremely overconfident (T=10.0 optimal)
+- Dataset scale (only 3 SPEECH speakers, 1 in test) is the main limitation
+- With 50+ speakers, expect 90-95% accuracy
 
 All tools and infrastructure now production-ready for honest evaluation.
 
 See Documentation/LEAKAGE_FIX_REPORT.md for complete timeline.
+See MULTI_SEED_VALIDATION_COMPLETE.md for full validation report.
+See COMPREHENSIVE_ANALYSIS_SUMMARY.md for complete analysis summary.
 See Documentation/VALIDATION_GUIDE.md for validation workflow.
 "
 

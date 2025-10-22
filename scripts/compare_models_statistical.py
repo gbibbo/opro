@@ -252,7 +252,7 @@ def main():
     merged = df_A.merge(df_B, on=['clip_id', 'audio_path'], suffixes=('_A', '_B'))
 
     if len(merged) != len(df_A) or len(merged) != len(df_B):
-        print(f"\n⚠️  WARNING: Predictions don't match perfectly!")
+        print(f"\nWARNING: Predictions don't match perfectly!")
         print(f"  Model A: {len(df_A)} samples")
         print(f"  Model B: {len(df_B)} samples")
         print(f"  Matched: {len(merged)} samples")
@@ -338,19 +338,19 @@ def main():
     print(f"             Wrong    {mcnemar['n10_A_wrong_B_correct']:6d}    {mcnemar['n11_both_wrong']:6d}")
 
     print(f"\nTest statistics:")
-    print(f"  χ² statistic: {mcnemar['chi2_statistic']:.4f}")
+    print(f"  Chi-squared statistic: {mcnemar['chi2_statistic']:.4f}")
     print(f"  p-value: {mcnemar['p_value']:.4f}")
     print(f"  Disagreements: {mcnemar['disagreements']} samples")
 
     print(f"\nInterpretation:")
     if mcnemar['significant_at_0.01']:
-        print(f"  ✓ HIGHLY SIGNIFICANT (p < 0.01)")
+        print(f"  HIGHLY SIGNIFICANT (p < 0.01)")
         print(f"    Models differ significantly in accuracy")
     elif mcnemar['significant_at_0.05']:
-        print(f"  ✓ SIGNIFICANT (p < 0.05)")
+        print(f"  SIGNIFICANT (p < 0.05)")
         print(f"    Models differ in accuracy")
     else:
-        print(f"  ✗ NOT SIGNIFICANT (p ≥ 0.05)")
+        print(f"  NOT SIGNIFICANT (p >= 0.05)")
         print(f"    No evidence that models differ in accuracy")
 
     if abs(mcnemar['effect_size']) > 0.5:
@@ -367,9 +367,9 @@ def main():
 
     if mcnemar['significant_at_0.05']:
         if results['accuracy_difference'] > 0:
-            print(f"✓ Use {args.model_A_name} - significantly better (p={mcnemar['p_value']:.4f})")
+            print(f"RECOMMENDATION: Use {args.model_A_name} - significantly better (p={mcnemar['p_value']:.4f})")
         else:
-            print(f"✓ Use {args.model_B_name} - significantly better (p={mcnemar['p_value']:.4f})")
+            print(f"RECOMMENDATION: Use {args.model_B_name} - significantly better (p={mcnemar['p_value']:.4f})")
     else:
         # CIs overlap?
         ci_A = results['model_A']['bootstrap_ci']
@@ -378,16 +378,16 @@ def main():
         overlap = not (ci_A['ci_upper'] < ci_B['ci_lower'] or ci_B['ci_upper'] < ci_A['ci_lower'])
 
         if overlap:
-            print(f"⚠️  No significant difference detected:")
+            print(f"No significant difference detected:")
             print(f"   - McNemar p={mcnemar['p_value']:.4f} (not significant)")
             print(f"   - Bootstrap CIs overlap")
-            print(f"   → Models perform equivalently on this test set")
-            print(f"   → Choose based on other criteria (size, speed, etc.)")
+            print(f"   -> Models perform equivalently on this test set")
+            print(f"   -> Choose based on other criteria (size, speed, etc.)")
         else:
-            print(f"⚠️  Borderline case:")
+            print(f"Borderline case:")
             print(f"   - McNemar p={mcnemar['p_value']:.4f} (not significant)")
             print(f"   - Bootstrap CIs don't overlap")
-            print(f"   → Increase test set size for more statistical power")
+            print(f"   -> Increase test set size for more statistical power")
 
     print()
 
@@ -413,9 +413,9 @@ def main():
 
             f.write("MCNEMAR TEST\n")
             f.write("-"*70 + "\n")
-            f.write(f"χ² = {mcnemar['chi2_statistic']:.4f}, p = {mcnemar['p_value']:.4f}\n")
-            f.write(f"Significant at α=0.05: {mcnemar['significant_at_0.05']}\n")
-            f.write(f"Significant at α=0.01: {mcnemar['significant_at_0.01']}\n")
+            f.write(f"Chi-squared = {mcnemar['chi2_statistic']:.4f}, p = {mcnemar['p_value']:.4f}\n")
+            f.write(f"Significant at alpha=0.05: {mcnemar['significant_at_0.05']}\n")
+            f.write(f"Significant at alpha=0.01: {mcnemar['significant_at_0.01']}\n")
 
         print(f"Detailed report saved to: {args.output_report}")
 
