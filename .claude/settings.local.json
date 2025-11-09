@@ -61,7 +61,8 @@
       "Bash(results/baselines/silero_vad_predictions.csv )",
       "Bash(results/prompt_opt_local/test_best_prompt_seed42.csv )",
       "Bash(\"Silero VAD (baseline)\" )",
-      "Bash(\"Qwen2-Audio + LoRA + Optimized Prompt\" )"
+      "Bash(\"Qwen2-Audio + LoRA + Optimized Prompt\" )",
+      "Bash([ -f \"c:\\VS code projects\\OPRO Qwen\\.gitignore\" ])"
     ],
     "deny": [],
     "ask": []

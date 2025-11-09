@@ -1,0 +1,277 @@
+# Complete Pipeline Configuration
+# Speech Detection with Qwen2-Audio
+
+# ============================================================================
+# ENVIRONMENT REQUIREMENTS
+# ============================================================================
+environment:
+  min_ram_gb: 16
+  min_vram_gb: 12
+  min_disk_gb: 100
+  transformers_cache: "~/.cache/huggingface"
+  hf_hub_enable_transfer: true
+  bitsandbytes_nowelcome: true
+
+# ============================================================================
+# DATASETS
+# ============================================================================
+datasets:
+  voxconverse:
+    url: "https://github.com/joonson/voxconverse"
+    path: "data/raw/voxconverse/dev"
+    description: "VoxConverse dev set for SPEECH samples"
+
+  esc50:
+    url: "https://github.com/karolpiczak/ESC-50"
+    path: "data/raw/esc50/audio"
+    description: "ESC-50 environmental sounds for NONSPEECH samples"
+
+  musan:
+    # MUSAN is optional for SPRINT 3 (not needed for initial pipeline)
+    enabled: false
+    url: "https://www.openslr.org/resources/17/musan.tar.gz"
+    path: "data/raw/musan"
+
+# ============================================================================
+# DATA PREPARATION
+# ============================================================================
+audio_processing:
+  target_sr: 16000  # Qwen2-Audio uses 16kHz
+  normalization: "peak"  # "peak" preserves SNR, "rms" equalizes energy
+  target_peak: 0.9
+  headroom_db: 3.0
+
+splits:
+  # GroupShuffleSplit by speaker_id (VoxConverse) and clip_id (ESC-50)
+  train_size: 64   # 32 SPEECH + 32 NONSPEECH
+  dev_size: 72     # 36 SPEECH + 36 NONSPEECH
+  test_size: 24    # 12 SPEECH + 12 NONSPEECH
+  seed: 42
+  group_by:
+    voxconverse: "speaker_id"
+    esc50: "clip_id"
+
+# ============================================================================
+# EXPERIMENTAL DESIGN
+# ============================================================================
+experimental_design:
+  # Base clips are 1000ms extracted from VoxConverse/ESC-50
+  base_duration_ms: 1000
+
+  # Generate variants with different durations
+  durations_ms: [20, 40, 60, 80, 100, 200, 500, 1000]
+
+  # Generate variants with different SNR levels
+  snr_levels_db: [-10, -5, 0, 5, 10, 20]
+
+  # Padding: center audio in 2000ms container with low-amplitude noise
+  padding_duration_ms: 2000
+  noise_amplitude: 0.0001  # Very low noise to fill silence
+
+  # Total variants per split:
+  # train: 64 × 8 × 6 = 3,072
+  # dev:   72 × 8 × 6 = 3,456
+  # test:  24 × 8 × 6 = 1,152
+
+# ============================================================================
+# TRAINING
+# ============================================================================
+training:
+  # Multi-seed for reproducibility
+  seeds: [42, 123, 456]
+
+  # Base model
+  base_model: "Qwen/Qwen2-Audio-7B-Instruct"
+
+  # Train ONLY on clean baseline (1000ms, +20dB)
+  # This tests generalization to degraded conditions
+  train_filter:
+    duration_ms: 1000
+    snr_db: 20
+
+  # Validation also on clean baseline
+  val_filter:
+    duration_ms: 1000
+    snr_db: 20
+
+  # LoRA configuration
+  lora:
+    r: 64
+    alpha: 16
+    dropout: 0.05
+    bias: "none"
+    task_type: "CAUSAL_LM"
+    target_modules:
+      - "q_proj"
+      - "k_proj"
+      - "v_proj"
+      - "o_proj"
+      - "gate_proj"
+      - "up_proj"
+      - "down_proj"
+
+  # QLoRA 4-bit quantization
+  quantization:
+    load_in_4bit: true
+    bnb_4bit_compute_dtype: "bfloat16"
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+
+  # Training hyperparameters
+  hyperparameters:
+    num_epochs: 3
+    per_device_train_batch_size: 1  # Conservative for 12GB VRAM
+    per_device_eval_batch_size: 2
+    gradient_accumulation_steps: 8  # Effective batch size = 8
+    learning_rate: 5.0e-5
+    warmup_ratio: 0.1
+    weight_decay: 0.01
+    lr_scheduler_type: "cosine"
+    logging_steps: 10
+    eval_steps: 50
+    save_steps: 100
+    save_total_limit: 2
+    gradient_checkpointing: true
+    fp16: false
+    bf16: true  # Better for training stability
+    optim: "paged_adamw_8bit"  # Memory-efficient optimizer
+    max_grad_norm: 1.0
+
+  # Prompt template for training
+  prompt_template: "Does this audio contain human speech? Answer SPEECH or NONSPEECH."
+
+# ============================================================================
+# EVALUATION
+# ============================================================================
+evaluation:
+  batch_size: 8
+
+  # A/B choice tokens (handle tokenizer variations)
+  choice_a_tokens: ["A", " A"]
+  choice_b_tokens: ["B", " B"]
+
+  # Logit aggregation method
+  aggregation: "logsumexp"  # More numerically stable than max
+
+# ============================================================================
+# OPTIMIZATION (ALL ON DEV ONLY - NEVER ON TEST)
+# ============================================================================
+optimization:
+  # Temperature calibration on DEV
+  calibration:
+    enabled: true
+    filter_duration_ms: 1000
+    filter_snr_db: 20
+    temperature_range: [0.5, 20.0]
+    num_points: 40
+    metric: "ece"  # Expected Calibration Error
+
+  # Prompt optimization on DEV
+  prompt_search:
+    enabled: true
+    filter_duration_ms: 1000
+    filter_snr_db: 20
+    templates:
+      - "Does this audio contain human speech? Answer SPEECH or NONSPEECH."
+      - "Is there any human voice speaking in this audio? Reply SPEECH or NONSPEECH."
+      - "Listen carefully. Does this recording contain speech? Answer SPEECH or NONSPEECH."
+      - "Is human speech present in this audio clip? Respond SPEECH or NONSPEECH."
+      - "Classify this audio: Does it contain speech? Answer SPEECH or NONSPEECH."
+      - "Can you detect any human speech in this recording? Reply SPEECH or NONSPEECH."
+      - "Please identify if this audio contains human speech. Answer SPEECH or NONSPEECH."
+      - "Does this sound clip include spoken words? Respond SPEECH or NONSPEECH."
+      - "Listen to this audio. Is there human speech? Answer SPEECH or NONSPEECH."
+      - "Speech detection: Does this audio contain speech? Reply SPEECH or NONSPEECH."
+
+  # Threshold optimization on DEV
+  threshold_search:
+    enabled: true
+    filter_duration_ms: 1000
+    filter_snr_db: 20
+    threshold_range: [-5.0, 5.0]
+    num_points: 100
+    metric: "accuracy"
+
+# ============================================================================
+# ANALYSIS
+# ============================================================================
+analysis:
+  # Psychometric curves
+  psychometric:
+    bootstrap_iterations: 1000
+    confidence_level: 0.95
+    threshold_percentiles: [50, 75, 90]  # DT50, DT75, DT90
+
+    # Stratified SNR curves at these durations
+    stratified_durations_ms: [20, 80, 200, 1000]
+
+  # Statistical tests
+  statistical:
+    mcnemar_alpha: 0.05
+    bonferroni_correction: true
+
+  # Baseline comparisons
+  baselines:
+    silero_vad:
+      enabled: true
+      threshold: 0.5
+    webrtc_vad:
+      enabled: false  # Requires compilation on Windows
+
+# ============================================================================
+# PATHS
+# ============================================================================
+paths:
+  data_root: "data"
+  checkpoints: "checkpoints"
+  results: "results"
+  logs: "logs"
+
+  # Subdirectories
+  raw_data: "data/raw"
+  processed_data: "data/processed"
+  base_clips: "data/processed/base_1000ms"
+  experimental_variants: "data/processed/experimental_variants"
+
+  # Results subdirectories
+  dev_eval: "results/dev_eval"
+  test_final: "results/test_final"
+  calibration: "results/calibration"
+  prompt_opt: "results/prompt_opt"
+  threshold_opt: "results/threshold_opt"
+  psychometric: "results/psychometric_curves"
+  baselines: "results/baselines"
+  aggregated: "results/aggregated"
+  comparison: "results/comparison"
+  statistical: "results/statistical_tests"
+
+# ============================================================================
+# PIPELINE OPTIONS
+# ============================================================================
+pipeline:
+  # Skip stages if outputs already exist
+  skip_existing: true
+
+  # Resume from checkpoint if interrupted
+  resume: true
+
+  # Clean intermediate files after pipeline completes
+  clean_intermediates: false
+
+  # Generate manifest with git commit, config, timestamps
+  generate_manifest: true
+
+  # Verbose logging
+  verbose: true
+
+  # Dry run (print commands without executing)
+  dry_run: false
+
+# ============================================================================
+# SMOKE TEST (for rapid iteration)
+# ============================================================================
+smoke_test:
+  enabled: false  # Set to true for quick testing
+  limit_per_split: 2  # Use only 2 samples per split
+  epochs: 1
+  seeds: [42]
