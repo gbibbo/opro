@@ -75,6 +75,8 @@ class SpeechDetectionDataset(Dataset):
         system_prompt: str,
         user_prompt: str,
         max_audio_length: int = 30,  # seconds
+        filter_duration: Optional[int] = None,  # ms
+        filter_snr: Optional[float] = None,  # dB
     ):
         self.df = pd.read_csv(metadata_csv)
         self.processor = processor
@@ -83,6 +85,25 @@ class SpeechDetectionDataset(Dataset):
         self.max_audio_length = max_audio_length
 
         print(f"  Loaded {len(self.df)} samples from {metadata_csv.name}")
+
+        # Apply filters if specified
+        if filter_duration is not None:
+            if 'duration_ms' in self.df.columns:
+                orig_len = len(self.df)
+                self.df = self.df[self.df['duration_ms'] == filter_duration]
+                print(f"    Filtered by duration={filter_duration}ms: {orig_len} -> {len(self.df)}")
+            else:
+                print(f"    WARNING: filter_duration specified but 'duration_ms' column not found")
+
+        if filter_snr is not None:
+            if 'snr_db' in self.df.columns:
+                orig_len = len(self.df)
+                self.df = self.df[self.df['snr_db'] == filter_snr]
+                print(f"    Filtered by SNR={filter_snr}dB: {orig_len} -> {len(self.df)}")
+            else:
+                print(f"    WARNING: filter_snr specified but 'snr_db' column not found")
+
+        print(f"  Final dataset size: {len(self.df)}")
         print(f"    SPEECH:    {(self.df['ground_truth'] == 'SPEECH').sum()}")
         print(f"    NONSPEECH: {(self.df['ground_truth'] == 'NONSPEECH').sum()}")
 
@@ -243,19 +264,39 @@ def main():
     import numpy as np
 
     parser = argparse.ArgumentParser(description="Fine-tune Qwen2-Audio")
+
+    # Existing arguments
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--output_dir", type=str, help="Custom output directory")
+    parser.add_argument("--output_dir", type=str, required=True, help="Directory to save checkpoints and logs")
     parser.add_argument("--lora_r", type=int, default=16, help="LoRA rank")
     parser.add_argument("--lora_alpha", type=int, default=32, help="LoRA alpha")
     parser.add_argument("--add_mlp_targets", action="store_true", help="Add MLP layers to LoRA targets")
+
+    # NEW arguments that the pipeline is passing
+    parser.add_argument("--train_csv", type=str, required=True, help="Path to training metadata CSV")
+    parser.add_argument("--val_csv", type=str, required=True, help="Path to validation metadata CSV")
+    parser.add_argument("--filter_duration", type=int, default=None, help="Filter by duration in ms (e.g., 1000). If None, no filtering.")
+    parser.add_argument("--filter_snr", type=float, default=None, help="Filter by SNR in dB (e.g., 20). If None, no filtering.")
+    parser.add_argument("--num_epochs", type=int, default=3, help="Number of training epochs")
+    parser.add_argument("--per_device_train_batch_size", type=int, default=2, help="Training batch size per device")
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=8, help="Gradient accumulation steps")
+    parser.add_argument("--learning_rate", type=float, default=2e-4, help="Learning rate")
+
     args = parser.parse_args()
 
     config = TrainingConfig()
+
+    # Apply arguments to config
     config.seed = args.seed
-    if args.output_dir:
-        config.output_dir = Path(args.output_dir)
+    config.output_dir = Path(args.output_dir)
     config.lora_r = args.lora_r
     config.lora_alpha = args.lora_alpha
+    config.train_csv = Path(args.train_csv)
+    config.test_csv = Path(args.val_csv)  # Note: using val_csv for test_csv (evaluation set)
+    config.num_epochs = args.num_epochs
+    config.batch_size = args.per_device_train_batch_size
+    config.gradient_accumulation_steps = args.gradient_accumulation_steps
+    config.learning_rate = args.learning_rate
 
     # Set seeds for reproducibility
     torch.manual_seed(config.seed)
@@ -293,6 +334,8 @@ def main():
         processor,
         config.system_prompt,
         config.user_prompt,
+        filter_duration=args.filter_duration,
+        filter_snr=args.filter_snr,
     )
 
     eval_dataset = SpeechDetectionDataset(
@@ -300,6 +343,8 @@ def main():
         processor,
         config.system_prompt,
         config.user_prompt,
+        filter_duration=args.filter_duration,
+        filter_snr=args.filter_snr,
     )
 
     # Load model with quantization
