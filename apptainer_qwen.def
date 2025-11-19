@@ -39,6 +39,11 @@ From: nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
     export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
 %post
+    # Prevent interactive prompts during package installation
+    export DEBIAN_FRONTEND=noninteractive
+    export TZ=Europe/London
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
     # Update system packages
     apt-get update -y
     apt-get upgrade -y
