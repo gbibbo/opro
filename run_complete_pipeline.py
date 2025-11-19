@@ -205,7 +205,7 @@ class PipelineOrchestrator:
             return True
 
         cmd = [
-            'python', 'scripts/prepare_base_clips.py',
+            'python3', 'scripts/prepare_base_clips.py',
             '--voxconverse_dir', self.config['datasets']['voxconverse']['path'],
             '--esc50_dir', self.config['datasets']['esc50']['path'],
             '--output_dir', str(output_dir),
@@ -230,7 +230,7 @@ class PipelineOrchestrator:
             return True
 
         cmd = [
-            'python', 'scripts/generate_experimental_variants.py',
+            'python3', 'scripts/generate_experimental_variants.py',
             '--input_base', self.config['paths']['base_clips'],
             '--output_dir', str(output_dir),
             '--durations', *map(str, self.config['experimental_design']['durations_ms']),
@@ -255,7 +255,7 @@ class PipelineOrchestrator:
             logger.info(f"  [{idx}/{len(self.config['training']['seeds'])}] Training seed {seed}...")
 
             cmd = [
-                'python', 'scripts/finetune_qwen_audio.py',
+                'python3', 'scripts/finetune_qwen_audio.py',
                 '--seed', str(seed),
                 '--train_csv', f"{self.config['paths']['experimental_variants']}/train_metadata.csv",
                 '--filter_duration', str(self.config['training']['train_filter']['duration_ms']),
@@ -290,7 +290,7 @@ class PipelineOrchestrator:
             logger.info(f"  [{idx}/{len(self.config['training']['seeds'])}] Evaluating seed {seed}...")
 
             cmd = [
-                'python', 'scripts/evaluate_with_logits.py',
+                'python3', 'scripts/evaluate_with_logits.py',
                 '--checkpoint', f"{self.config['paths']['checkpoints']}/qwen_lora_seed{seed}/final",
                 '--test_csv', f"{self.config['paths']['experimental_variants']}/dev_metadata.csv",
                 '--output_csv', str(output_csv),
@@ -335,7 +335,7 @@ class PipelineOrchestrator:
             logger.info(f"  [{idx}/{len(self.config['training']['seeds'])}] Evaluating seed {seed}...")
 
             cmd = [
-                'python', 'scripts/evaluate_with_logits.py',
+                'python3', 'scripts/evaluate_with_logits.py',
                 '--checkpoint', f"{self.config['paths']['checkpoints']}/qwen_lora_seed{seed}/final",
                 '--test_csv', f"{self.config['paths']['experimental_variants']}/test_metadata.csv",
                 '--output_csv', str(output_csv),
@@ -361,7 +361,7 @@ class PipelineOrchestrator:
         logger.info(f"Found {len(csv_files)} evaluation files: {[Path(f).name for f in csv_files]}")
 
         cmd = [
-            'python', 'scripts/compute_psychometric_curves.py',
+            'python3', 'scripts/compute_psychometric_curves.py',
             '--input_csvs', *csv_files,  # Expand list of files
             '--output_dir', self.config['paths']['psychometric'],
             '--bootstrap_iterations', str(self.config['analysis']['psychometric']['bootstrap_iterations']),
@@ -379,7 +379,7 @@ class PipelineOrchestrator:
             return True
 
         cmd = [
-            'python', 'scripts/baseline_silero_vad.py',
+            'python3', 'scripts/baseline_silero_vad.py',
             '--test_csv', f"{self.config['paths']['experimental_variants']}/test_metadata.csv",
             '--filter_duration', '1000',
             '--filter_snr', '20',
@@ -397,7 +397,7 @@ class PipelineOrchestrator:
 
         # Generate final report
         cmd = [
-            'python', 'scripts/generate_pipeline_report.py',
+            'python3', 'scripts/generate_pipeline_report.py',
             '--config', str(self.config_path),
             '--results_dir', self.config['paths']['results'],
             '--output_report', 'PIPELINE_EXECUTION_REPORT.md',
