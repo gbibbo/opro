@@ -4,7 +4,9 @@ This script fine-tunes the model on clean audio clips to improve
 speech detection accuracy, especially in noisy conditions.
 """
 
+# Disable hf_transfer BEFORE any imports - must be set before transformers import
 import os
+os.environ['HF_HUB_ENABLE_HF_TRANSFER'] = '0'
 import sys
 from pathlib import Path
 from dataclasses import dataclass
@@ -22,9 +24,6 @@ from transformers import (
     Trainer,
 )
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-
-# Disable hf_transfer to avoid requiring the hf_transfer package
-os.environ['HF_HUB_ENABLE_HF_TRANSFER'] = '0'
 
 # Add project root to path
 script_dir = Path(__file__).resolve().parent
@@ -329,7 +328,7 @@ def main():
 
     # Load processor
     print(f"\nLoading processor...")
-    processor = AutoProcessor.from_pretrained(config.model_name, local_files_only=True)
+    processor = AutoProcessor.from_pretrained(config.model_name)
 
     # Load datasets
     print(f"\nLoading datasets...")
@@ -368,7 +367,6 @@ def main():
         quantization_config=bnb_config,
         device_map="auto",
         torch_dtype=torch.float16 if not config.use_4bit else None,
-        local_files_only=True,
     )
 
     # Prepare model for training
