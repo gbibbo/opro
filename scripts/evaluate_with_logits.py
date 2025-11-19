@@ -32,52 +32,39 @@ from peft import PeftModel
 
 def get_speech_nonspeech_token_ids(tokenizer):
     """
-    Get all token IDs that represent 'SPEECH' or 'NONSPEECH'.
+    Get token IDs for 'SPEECH' and 'NONSPEECH'.
 
-    Important: Handles both variants (with and without leading space)
-    to avoid tokenization bias. Removes any tokens that appear in BOTH
-    to avoid ambiguity (e.g., NONSPEECH may contain SPEECH as sub-tokens).
+    CRITICAL: Since NONSPEECH contains SPEECH as a substring, their tokenizations
+    overlap. To avoid bias, we use ONLY the FIRST token of each word.
+
+    This gives us unique, unambiguous tokens without favoring either class
+    due to different token counts.
 
     Returns:
-        ids_SPEECH, ids_NONSPEECH: Lists of token IDs (no overlap)
+        ids_SPEECH, ids_NONSPEECH: Lists containing single token IDs
     """
-    # Tokenize 'SPEECH' and 'NONSPEECH' with and without leading space
-    ids_SPEECH = []
-    ids_NONSPEECH = []
+    # Get full tokenizations for debugging
+    tokens_speech_full = tokenizer.encode('SPEECH', add_special_tokens=False)
+    tokens_nonspeech_full = tokenizer.encode('NONSPEECH', add_special_tokens=False)
 
-    # Variant 1: No space
-    ids_SPEECH.extend(tokenizer.encode('SPEECH', add_special_tokens=False))
-    ids_NONSPEECH.extend(tokenizer.encode('NONSPEECH', add_special_tokens=False))
+    print(f"Full tokenization of 'SPEECH': {tokens_speech_full}")
+    print(f"Full tokenization of 'NONSPEECH': {tokens_nonspeech_full}")
 
-    # Variant 2: Leading space
-    ids_SPEECH_space = tokenizer.encode(' SPEECH', add_special_tokens=False)
-    ids_NONSPEECH_space = tokenizer.encode(' NONSPEECH', add_special_tokens=False)
+    # Use ONLY the first token of each word (most discriminative, no overlap)
+    id_SPEECH = tokens_speech_full[0]
+    id_NONSPEECH = tokens_nonspeech_full[0]
 
-    # Add space variants (avoiding duplicates within each list)
-    for id_val in ids_SPEECH_space:
-        if id_val not in ids_SPEECH:
-            ids_SPEECH.append(id_val)
+    # Return as single-element lists for compatibility with existing code
+    ids_SPEECH = [id_SPEECH]
+    ids_NONSPEECH = [id_NONSPEECH]
 
-    for id_val in ids_NONSPEECH_space:
-        if id_val not in ids_NONSPEECH:
-            ids_NONSPEECH.append(id_val)
+    print(f"Using FIRST token only:")
+    print(f"  SPEECH token: {id_SPEECH}")
+    print(f"  NONSPEECH token: {id_NONSPEECH}")
 
-    print(f"Token IDs for 'SPEECH' (before dedup): {ids_SPEECH}")
-    print(f"Token IDs for 'NONSPEECH' (before dedup): {ids_NONSPEECH}")
-
-    # CRITICAL: Remove tokens that appear in BOTH lists to avoid ambiguity
-    overlap = set(ids_SPEECH) & set(ids_NONSPEECH)
-    if overlap:
-        print(f"WARNING: Found {len(overlap)} overlapping tokens: {overlap}")
-        print(f"Removing overlapping tokens to avoid ambiguity...")
-        ids_SPEECH = [t for t in ids_SPEECH if t not in overlap]
-        ids_NONSPEECH = [t for t in ids_NONSPEECH if t not in overlap]
-
-    print(f"Token IDs for 'SPEECH' (after dedup): {ids_SPEECH}")
-    print(f"Token IDs for 'NONSPEECH' (after dedup): {ids_NONSPEECH}")
-
-    if not ids_SPEECH or not ids_NONSPEECH:
-        raise ValueError("ERROR: After removing overlap, one of the token lists is empty!")
+    # Verify no overlap
+    if id_SPEECH == id_NONSPEECH:
+        raise ValueError(f"ERROR: SPEECH and NONSPEECH have the same first token: {id_SPEECH}")
 
     return ids_SPEECH, ids_NONSPEECH
 
