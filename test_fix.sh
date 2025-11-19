@@ -1,10 +1,9 @@
 #!/bin/bash
 #SBATCH --job-name=test_fix
-#SBATCH --partition=3090
+#SBATCH --partition=2080ti
 #SBATCH --gpus=1
 #SBATCH --mem=32G
 #SBATCH --time=00:30:00
-#SBATCH --constraint=fs_weka
 #SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro/logs/test_fix_%j.out
 #SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro/logs/test_fix_%j.err
 
