@@ -2,14 +2,17 @@
 """
 Evaluate fine-tuned model using DIRECT LOGITS (no generate).
 
-This is faster and more stable than generate() for binary A/B classification.
-We compute the forward pass once and extract logits for tokens A and B directly.
+This is faster and more stable than generate() for binary SPEECH/NONSPEECH classification.
+We compute the forward pass once and extract logits for SPEECH and NONSPEECH tokens directly.
 
 Advantages over generate():
 1. Faster: No sampling/decoding overhead
 2. More stable: Deterministic (no temperature/sampling issues)
-3. Same result: For constrained A/B tasks, logits are sufficient
+3. Same result: For constrained binary tasks, logits are sufficient
 4. Enables calibration: Easy to apply temperature scaling
+
+IMPORTANT: This evaluation script uses the SAME prompt format as training:
+"Does this audio contain human speech? Answer SPEECH or NONSPEECH."
 
 References:
 - Guo et al. (2017): "On Calibration of Modern Neural Networks"
@@ -27,45 +30,45 @@ from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor
 from peft import PeftModel
 
 
-def get_ab_token_ids(tokenizer):
+def get_speech_nonspeech_token_ids(tokenizer):
     """
-    Get all token IDs that represent 'A' or 'B'.
+    Get all token IDs that represent 'SPEECH' or 'NONSPEECH'.
 
     Important: Handles both variants (with and without leading space)
-    to avoid tokenization bias. Qwen tokenizer may produce "A" or " A"
+    to avoid tokenization bias. Qwen tokenizer may produce different tokens
     depending on context.
 
     Returns:
-        ids_A, ids_B: Lists of token IDs (may contain multiple variants)
+        ids_SPEECH, ids_NONSPEECH: Lists of token IDs (may contain multiple variants)
     """
-    # Tokenize 'A' and 'B' with and without leading space
-    ids_A = []
-    ids_B = []
+    # Tokenize 'SPEECH' and 'NONSPEECH' with and without leading space
+    ids_SPEECH = []
+    ids_NONSPEECH = []
 
     # Variant 1: No space
-    ids_A.extend(tokenizer.encode('A', add_special_tokens=False))
-    ids_B.extend(tokenizer.encode('B', add_special_tokens=False))
+    ids_SPEECH.extend(tokenizer.encode('SPEECH', add_special_tokens=False))
+    ids_NONSPEECH.extend(tokenizer.encode('NONSPEECH', add_special_tokens=False))
 
     # Variant 2: Leading space
-    ids_A_space = tokenizer.encode(' A', add_special_tokens=False)
-    ids_B_space = tokenizer.encode(' B', add_special_tokens=False)
+    ids_SPEECH_space = tokenizer.encode(' SPEECH', add_special_tokens=False)
+    ids_NONSPEECH_space = tokenizer.encode(' NONSPEECH', add_special_tokens=False)
 
     # Add space variants (avoiding duplicates)
-    for id_val in ids_A_space:
-        if id_val not in ids_A:
-            ids_A.append(id_val)
+    for id_val in ids_SPEECH_space:
+        if id_val not in ids_SPEECH:
+            ids_SPEECH.append(id_val)
 
-    for id_val in ids_B_space:
-        if id_val not in ids_B:
-            ids_B.append(id_val)
+    for id_val in ids_NONSPEECH_space:
+        if id_val not in ids_NONSPEECH:
+            ids_NONSPEECH.append(id_val)
 
-    print(f"Token IDs for 'A' (including ' A'): {ids_A}")
-    print(f"Token IDs for 'B' (including ' B'): {ids_B}")
+    print(f"Token IDs for 'SPEECH' (including ' SPEECH'): {ids_SPEECH}")
+    print(f"Token IDs for 'NONSPEECH' (including ' NONSPEECH'): {ids_NONSPEECH}")
 
-    return ids_A, ids_B
+    return ids_SPEECH, ids_NONSPEECH
 
 
-def evaluate_sample_logits(model, processor, audio_path, ids_A, ids_B, temperature=1.0, user_prompt=None):
+def evaluate_sample_logits(model, processor, audio_path, ids_SPEECH, ids_NONSPEECH, temperature=1.0, user_prompt=None):
     """
     Evaluate a single sample using direct logits (no generate).
 
@@ -73,10 +76,10 @@ def evaluate_sample_logits(model, processor, audio_path, ids_A, ids_B, temperatu
         model: The fine-tuned model
         processor: The Qwen2-Audio processor
         audio_path: Path to audio file
-        ids_A: List of token IDs for 'A'
-        ids_B: List of token IDs for 'B'
+        ids_SPEECH: List of token IDs for 'SPEECH'
+        ids_NONSPEECH: List of token IDs for 'NONSPEECH'
         temperature: Temperature for scaling logits (default 1.0 = no scaling)
-        user_prompt: Custom prompt text (default: standard A/B prompt)
+        user_prompt: Custom prompt text (default: matches training prompt)
 
     Returns:
         dict with prediction, confidence, and raw logits
@@ -91,9 +94,9 @@ def evaluate_sample_logits(model, processor, audio_path, ids_A, ids_B, temperatu
         resampler = T.Resample(orig_freq=sr, new_freq=target_sr)
         audio = resampler(torch.tensor(audio)).numpy()
 
-    # Use custom prompt or default
+    # Use custom prompt or default (MUST MATCH TRAINING PROMPT)
     if user_prompt is None:
-        user_prompt = "Is this audio SPEECH (A) or NON-SPEECH (B)? Answer with a single letter:"
+        user_prompt = "Does this audio contain human speech? Answer SPEECH or NONSPEECH."
 
     # Create prompt
     conversation = [
@@ -125,37 +128,37 @@ def evaluate_sample_logits(model, processor, audio_path, ids_A, ids_B, temperatu
     # Shape: (batch_size, seq_len, vocab_size)
     logits = outputs.logits[0, -1, :]  # Last position
 
-    # Extract logits for A and B tokens
-    logits_A = logits[ids_A]  # Could be multiple tokens (e.g., "A" and " A")
-    logits_B = logits[ids_B]
+    # Extract logits for SPEECH and NONSPEECH tokens
+    logits_SPEECH = logits[ids_SPEECH]  # Could be multiple tokens
+    logits_NONSPEECH = logits[ids_NONSPEECH]
 
     # Apply temperature scaling
-    logits_A = logits_A / temperature
-    logits_B = logits_B / temperature
+    logits_SPEECH = logits_SPEECH / temperature
+    logits_NONSPEECH = logits_NONSPEECH / temperature
 
     # Aggregate multiple token variants using logsumexp (sum probabilities)
     # This is more robust than max() for handling tokenization variants
-    # logsumexp([a,b]) ≈ log(exp(a) + exp(b)) = log(p_A + p_A_space)
-    logit_A = torch.logsumexp(logits_A, dim=0).item()
-    logit_B = torch.logsumexp(logits_B, dim=0).item()
+    # logsumexp([a,b]) ≈ log(exp(a) + exp(b)) = log(p_SPEECH + p_SPEECH_space)
+    logit_SPEECH = torch.logsumexp(logits_SPEECH, dim=0).item()
+    logit_NONSPEECH = torch.logsumexp(logits_NONSPEECH, dim=0).item()
 
-    # Compute probabilities using softmax over {A, B}
+    # Compute probabilities using softmax over {SPEECH, NONSPEECH}
     # After logsumexp, these represent the total probability mass for each option
-    logit_diff = logit_A - logit_B
-    prob_A = torch.sigmoid(torch.tensor(logit_diff)).item()
-    prob_B = 1.0 - prob_A
+    logit_diff = logit_SPEECH - logit_NONSPEECH
+    prob_SPEECH = torch.sigmoid(torch.tensor(logit_diff)).item()
+    prob_NONSPEECH = 1.0 - prob_SPEECH
 
     # Prediction
-    prediction = 'A' if prob_A > prob_B else 'B'
-    confidence = max(prob_A, prob_B)
+    prediction = 'SPEECH' if prob_SPEECH > prob_NONSPEECH else 'NONSPEECH'
+    confidence = max(prob_SPEECH, prob_NONSPEECH)
 
     return {
         'prediction': prediction,
         'confidence': confidence,
-        'prob_A': prob_A,
-        'prob_B': prob_B,
-        'logit_A': logit_A,
-        'logit_B': logit_B,
+        'prob_SPEECH': prob_SPEECH,
+        'prob_NONSPEECH': prob_NONSPEECH,
+        'logit_SPEECH': logit_SPEECH,
+        'logit_NONSPEECH': logit_NONSPEECH,
         'logit_diff': logit_diff
     }
 
@@ -238,8 +241,8 @@ def main():
     # Load processor
     processor = AutoProcessor.from_pretrained(base_model_id, trust_remote_code=True)
 
-    # Get A/B token IDs
-    ids_A, ids_B = get_ab_token_ids(processor.tokenizer)
+    # Get SPEECH/NONSPEECH token IDs
+    ids_SPEECH, ids_NONSPEECH = get_speech_nonspeech_token_ids(processor.tokenizer)
 
     # Load test data
     print(f"\nLoading test data from {args.test_csv}")
@@ -249,8 +252,7 @@ def main():
     # Determine label column
     label_col = 'ground_truth' if 'ground_truth' in test_df.columns else 'label'
 
-    # Label mapping
-    label_map = {'SPEECH': 'A', 'NONSPEECH': 'B'}
+    # No label mapping needed - model now outputs SPEECH/NONSPEECH directly
 
     # Evaluate
     results = []
@@ -266,16 +268,15 @@ def main():
         if not audio_path.startswith('data/'):
             audio_path = 'data/' + audio_path
         ground_truth = row[label_col]
-        ground_truth_token = label_map[ground_truth]
 
         result = evaluate_sample_logits(
             model, processor, audio_path,
-            ids_A, ids_B,
+            ids_SPEECH, ids_NONSPEECH,
             temperature=args.temperature,
             user_prompt=args.prompt
         )
 
-        is_correct = (result['prediction'] == ground_truth_token)
+        is_correct = (result['prediction'] == ground_truth)
         correct += is_correct
         total += 1
 
@@ -283,14 +284,13 @@ def main():
             'clip_id': row['clip_id'],
             'audio_path': audio_path,
             'ground_truth': ground_truth,
-            'ground_truth_token': ground_truth_token,
             'prediction': result['prediction'],
             'correct': is_correct,
             'confidence': result['confidence'],
-            'prob_A': result['prob_A'],
-            'prob_B': result['prob_B'],
-            'logit_A': result['logit_A'],
-            'logit_B': result['logit_B'],
+            'prob_SPEECH': result['prob_SPEECH'],
+            'prob_NONSPEECH': result['prob_NONSPEECH'],
+            'logit_SPEECH': result['logit_SPEECH'],
+            'logit_NONSPEECH': result['logit_NONSPEECH'],
             'logit_diff': result['logit_diff']
         })
 
@@ -318,8 +318,8 @@ def main():
 
     print(f"\nOverall Accuracy: {correct}/{total} = {accuracy:.1f}%")
     print(f"\nPer-class accuracy:")
-    print(f"  SPEECH (A):    {speech_results['correct'].sum()}/{len(speech_results)} = {speech_acc:.1f}%")
-    print(f"  NONSPEECH (B): {nonspeech_results['correct'].sum()}/{len(nonspeech_results)} = {nonspeech_acc:.1f}%")
+    print(f"  SPEECH:    {speech_results['correct'].sum()}/{len(speech_results)} = {speech_acc:.1f}%")
+    print(f"  NONSPEECH: {nonspeech_results['correct'].sum()}/{len(nonspeech_results)} = {nonspeech_acc:.1f}%")
 
     print(f"\nConfidence statistics:")
     print(f"  Overall:  {results_df['confidence'].mean():.3f}")
@@ -328,7 +328,7 @@ def main():
     print(f"  Gap:      {correct_conf - wrong_conf:.3f}" if not pd.isna(wrong_conf) else "  Gap:      N/A")
 
     # Logit difference statistics
-    print(f"\nLogit difference (A - B) statistics:")
+    print(f"\nLogit difference (SPEECH - NONSPEECH) statistics:")
     print(f"  Mean: {results_df['logit_diff'].mean():.3f}")
     print(f"  Std:  {results_df['logit_diff'].std():.3f}")
     print(f"  Min:  {results_df['logit_diff'].min():.3f}")
@@ -343,7 +343,7 @@ def main():
 
         for _, error in errors.iterrows():
             print(f"clip_id: {error['clip_id']}")
-            print(f"  Ground truth: {error['ground_truth']} ({error['ground_truth_token']})")
+            print(f"  Ground truth: {error['ground_truth']}")
             print(f"  Prediction:   {error['prediction']}")
             print(f"  Confidence:   {error['confidence']:.3f}")
             print(f"  Logit diff:   {error['logit_diff']:.3f}")
