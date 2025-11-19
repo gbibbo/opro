@@ -1,0 +1,156 @@
+Bootstrap: docker
+From: nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
+
+%labels
+    Author OPRO Qwen Team
+    Version 1.0
+    Description Speech Detection with Qwen2-Audio + LoRA Fine-tuning
+
+%help
+    This container provides a complete environment for running the OPRO Qwen
+    speech detection pipeline with Qwen2-Audio-7B fine-tuning.
+
+    Features:
+    - CUDA 12.1 + cuDNN 8
+    - Python 3.11
+    - PyTorch 2.0+
+    - Qwen2-Audio transformers
+    - Fast HuggingFace Hub downloads (hf_transfer)
+
+    Usage:
+        apptainer exec --nv opro_qwen.sif python3 run_complete_pipeline.py --config config/pipeline_config.yaml
+
+%environment
+    # Python environment
+    export PYTHONPATH=/app:$PYTHONPATH
+    export PYTHONUNBUFFERED=1
+
+    # HuggingFace settings
+    export HF_HOME=/tmp/huggingface
+    export TRANSFORMERS_CACHE=/tmp/huggingface/transformers
+    export HF_DATASETS_CACHE=/tmp/huggingface/datasets
+
+    # Enable hf_transfer for faster downloads
+    export HF_HUB_ENABLE_HF_TRANSFER=1
+
+    # CUDA settings
+    export CUDA_HOME=/usr/local/cuda
+    export PATH=/usr/local/cuda/bin:$PATH
+    export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
+%post
+    # Update system packages
+    apt-get update -y
+    apt-get upgrade -y
+
+    # Install system dependencies
+    apt-get install -y \
+        build-essential \
+        git \
+        wget \
+        curl \
+        ca-certificates \
+        libsndfile1 \
+        ffmpeg \
+        libsm6 \
+        libxext6 \
+        libxrender-dev \
+        libgomp1
+
+    # Install Python 3.11
+    apt-get install -y software-properties-common
+    add-apt-repository ppa:deadsnakes/ppa -y
+    apt-get update -y
+    apt-get install -y \
+        python3.11 \
+        python3.11-dev \
+        python3.11-distutils \
+        python3-pip
+
+    # Set python3 to point to python3.11
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+    update-alternatives --set python3 /usr/bin/python3.11
+
+    # Upgrade pip
+    python3 -m pip install --upgrade pip setuptools wheel
+
+    # Install PyTorch with CUDA support first (critical dependency)
+    python3 -m pip install torch>=2.0.0 torchaudio>=2.0.0 --index-url https://download.pytorch.org/whl/cu121
+
+    # Install hf_transfer BEFORE huggingface-hub for optimal download performance
+    # This enables 2-5x faster model downloads from HuggingFace Hub
+    python3 -m pip install hf_transfer>=0.1.0
+
+    # Install transformers and core ML libraries
+    python3 -m pip install \
+        transformers>=4.40.0 \
+        datasets>=2.18.0 \
+        accelerate>=0.27.0 \
+        peft>=0.10.0 \
+        bitsandbytes>=0.41.0
+
+    # Install HuggingFace Hub (after hf_transfer)
+    python3 -m pip install huggingface-hub>=0.21.0
+
+    # Install data processing libraries
+    python3 -m pip install \
+        pandas>=2.0.0 \
+        pyarrow>=15.0.0 \
+        numpy>=1.24.0 \
+        scipy>=1.12.0
+
+    # Install audio processing libraries
+    python3 -m pip install \
+        soundfile>=0.12.1 \
+        librosa>=0.10.1 \
+        webrtcvad>=2.0.10
+
+    # Install annotation tools
+    python3 -m pip install \
+        pyannote.core>=5.0.0 \
+        pyannote.database>=5.0.0
+
+    # Install ML/evaluation libraries
+    python3 -m pip install \
+        scikit-learn>=1.4.0 \
+        matplotlib>=3.8.0 \
+        seaborn>=0.12.0
+
+    # Install prompt optimization libraries (Sprint 9)
+    python3 -m pip install \
+        dspy-ai>=3.0.0 \
+        anthropic>=0.69.0 \
+        openai>=2.0.0 \
+        optuna>=3.4.0
+
+    # Install utilities
+    python3 -m pip install \
+        pyyaml>=6.0 \
+        tqdm>=4.66.0 \
+        requests>=2.31.0
+
+    # Clean up to reduce image size
+    apt-get clean
+    rm -rf /var/lib/apt/lists/*
+    python3 -m pip cache purge
+
+%runscript
+    #!/bin/bash
+    echo "OPRO Qwen Speech Detection Container"
+    echo "Python version: $(python3 --version)"
+    echo "PyTorch version: $(python3 -c 'import torch; print(torch.__version__)')"
+    echo "CUDA available: $(python3 -c 'import torch; print(torch.cuda.is_available())')"
+    echo "hf_transfer installed: $(python3 -c 'import hf_transfer; print(hf_transfer.__version__)')"
+    echo ""
+    echo "Usage: apptainer exec --nv opro_qwen.sif python3 <script.py>"
+    exec "$@"
+
+%test
+    # Verify installation
+    python3 --version
+    python3 -c "import torch; print(f'PyTorch: {torch.__version__}')"
+    python3 -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+    python3 -c "import transformers; print(f'Transformers: {transformers.__version__}')"
+    python3 -c "import hf_transfer; print(f'hf_transfer: {hf_transfer.__version__}')"
+    python3 -c "import peft; print(f'PEFT: {peft.__version__}')"
+    echo "All tests passed!"
