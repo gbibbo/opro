@@ -21,13 +21,19 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
+try:
+    import seaborn as sns
+    HAS_SEABORN = True
+except ImportError:
+    HAS_SEABORN = False
+    print("Warning: seaborn not available, plots will use matplotlib defaults")
 from scipy.interpolate import interp1d
 from tqdm import tqdm
 import warnings
 warnings.filterwarnings('ignore')
 
-sns.set_style("whitegrid")
+if HAS_SEABORN:
+    sns.set_style("whitegrid")
 
 
 def compute_accuracy_by_condition(df, group_col):
@@ -189,6 +195,28 @@ def main():
     df = pd.concat(dfs, ignore_index=True)
 
     print(f"\nLoaded {len(args.input_csvs)} files, {len(df)} total predictions")
+
+    # Extract duration_ms and snr_db from audio_path if not present as columns
+    if 'duration_ms' not in df.columns or 'snr_db' not in df.columns:
+        import re
+        print("Extracting duration_ms and snr_db from audio_path...")
+
+        def extract_params(audio_path):
+            # Pattern: dur20ms_snr-10dB or dur1000ms_snr20dB
+            dur_match = re.search(r'dur(\d+)ms', audio_path)
+            snr_match = re.search(r'snr(-?\d+)dB', audio_path)
+
+            duration_ms = int(dur_match.group(1)) if dur_match else None
+            snr_db = int(snr_match.group(1)) if snr_match else None
+
+            return pd.Series({'duration_ms': duration_ms, 'snr_db': snr_db})
+
+        extracted = df['audio_path'].apply(extract_params)
+        df['duration_ms'] = extracted['duration_ms']
+        df['snr_db'] = extracted['snr_db']
+
+        print(f"  Extracted duration_ms: {df['duration_ms'].nunique()} unique values")
+        print(f"  Extracted snr_db: {df['snr_db'].nunique()} unique values")
 
     # Duration curve
     plot_duration_curve(df, args.output_dir, args.bootstrap_iterations)
