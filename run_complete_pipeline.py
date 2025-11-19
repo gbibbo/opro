@@ -36,6 +36,7 @@ import sys
 import os
 from datetime import datetime
 import json
+import glob
 
 # Setup logging - will be configured per run
 logger = logging.getLogger(__name__)
@@ -349,9 +350,19 @@ class PipelineOrchestrator:
 
     def stage_10_psychometric_curves(self):
         """STAGE 10: Compute psychometric curves"""
+        # Expand glob pattern to find all evaluation CSV files
+        csv_pattern = f"{self.config['paths']['test_final']}/test_seed*_optimized.csv"
+        csv_files = glob.glob(csv_pattern)
+
+        if not csv_files:
+            logger.error(f"No evaluation CSV files found matching {csv_pattern}")
+            return False
+
+        logger.info(f"Found {len(csv_files)} evaluation files: {[Path(f).name for f in csv_files]}")
+
         cmd = [
             'python', 'scripts/compute_psychometric_curves.py',
-            '--input_csvs', f"{self.config['paths']['test_final']}/test_seed*_optimized.csv",
+            '--input_csvs', *csv_files,  # Expand list of files
             '--output_dir', self.config['paths']['psychometric'],
             '--bootstrap_iterations', str(self.config['analysis']['psychometric']['bootstrap_iterations']),
         ]
