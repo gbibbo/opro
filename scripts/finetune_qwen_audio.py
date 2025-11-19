@@ -116,8 +116,11 @@ class SpeechDetectionDataset(Dataset):
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
 
-        # Load audio
-        audio_path = project_root / row['audio_path']
+        # Load audio (prepend 'data/' if path doesn't start with it)
+        rel_path = row['audio_path']
+        if not rel_path.startswith('data/'):
+            rel_path = 'data/' + rel_path
+        audio_path = project_root / rel_path
         audio, sr = sf.read(audio_path)
 
         # Resample if needed
