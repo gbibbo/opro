@@ -121,7 +121,7 @@ def classify_audio_silero(audio_path, model, threshold=0.5, sample_rate=16000):
     }
 
 
-def evaluate_silero_vad(test_csv, threshold=0.5, sample_rate=16000):
+def evaluate_silero_vad(test_csv, threshold=0.5, sample_rate=16000, filter_duration=None, filter_snr=None):
     """
     Evaluate Silero VAD on test set.
 
@@ -129,6 +129,8 @@ def evaluate_silero_vad(test_csv, threshold=0.5, sample_rate=16000):
         test_csv: Path to test metadata CSV
         threshold: Threshold for speech detection
         sample_rate: Sample rate (8000 or 16000 Hz)
+        filter_duration: Filter by duration in ms (optional)
+        filter_snr: Filter by SNR in dB (optional)
 
     Returns:
         DataFrame with predictions and results
@@ -136,6 +138,25 @@ def evaluate_silero_vad(test_csv, threshold=0.5, sample_rate=16000):
     # Load test data
     test_df = pd.read_csv(test_csv)
     print(f"Test samples: {len(test_df)}")
+
+    # Apply filters if specified
+    if filter_duration is not None:
+        if 'duration_ms' in test_df.columns:
+            orig_len = len(test_df)
+            test_df = test_df[test_df['duration_ms'] == filter_duration]
+            print(f"  Filtered by duration={filter_duration}ms: {orig_len} -> {len(test_df)}")
+        else:
+            print(f"  WARNING: filter_duration specified but 'duration_ms' column not found")
+
+    if filter_snr is not None:
+        if 'snr_db' in test_df.columns:
+            orig_len = len(test_df)
+            test_df = test_df[test_df['snr_db'] == filter_snr]
+            print(f"  Filtered by SNR={filter_snr}dB: {orig_len} -> {len(test_df)}")
+        else:
+            print(f"  WARNING: filter_snr specified but 'snr_db' column not found")
+
+    print(f"Final test samples: {len(test_df)}")
 
     # Determine label column
     label_col = 'ground_truth' if 'ground_truth' in test_df.columns else 'label'
@@ -202,6 +223,10 @@ def main():
                        help='Speech detection threshold (default: 0.5)')
     parser.add_argument('--sample_rate', type=int, default=16000, choices=[8000, 16000],
                        help='Sample rate in Hz (default: 16000)')
+    parser.add_argument('--filter_duration', type=int, default=None,
+                       help='Filter by duration in ms (e.g., 1000). If None, no filtering.')
+    parser.add_argument('--filter_snr', type=float, default=None,
+                       help='Filter by SNR in dB (e.g., 20). If None, no filtering.')
 
     args = parser.parse_args()
 
@@ -213,7 +238,9 @@ def main():
     results_df = evaluate_silero_vad(
         args.test_csv,
         threshold=args.threshold,
-        sample_rate=args.sample_rate
+        sample_rate=args.sample_rate,
+        filter_duration=args.filter_duration,
+        filter_snr=args.filter_snr
     )
 
     # Calculate metrics
