@@ -194,6 +194,12 @@ def main():
         default=None,
         help="Path to save detailed predictions (optional)"
     )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=8,
+        help="Batch size for evaluation (default: 8)"
+    )
 
     args = parser.parse_args()
 
