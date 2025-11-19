@@ -213,7 +213,7 @@ analysis:
   # Baseline comparisons
   baselines:
     silero_vad:
-      enabled: true
+      enabled: false  # Disabled due to torchaudio incompatibility in container
       threshold: 0.5
     webrtc_vad:
       enabled: false  # Requires compilation on Windows
