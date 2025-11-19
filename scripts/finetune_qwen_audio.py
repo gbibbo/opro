@@ -329,7 +329,7 @@ def main():
 
     # Load processor
     print(f"\nLoading processor...")
-    processor = AutoProcessor.from_pretrained(config.model_name)
+    processor = AutoProcessor.from_pretrained(config.model_name, local_files_only=True)
 
     # Load datasets
     print(f"\nLoading datasets...")
@@ -368,6 +368,7 @@ def main():
         quantization_config=bnb_config,
         device_map="auto",
         torch_dtype=torch.float16 if not config.use_4bit else None,
+        local_files_only=True,
     )
 
     # Prepare model for training
