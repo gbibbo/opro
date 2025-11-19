@@ -35,11 +35,11 @@ def get_speech_nonspeech_token_ids(tokenizer):
     Get all token IDs that represent 'SPEECH' or 'NONSPEECH'.
 
     Important: Handles both variants (with and without leading space)
-    to avoid tokenization bias. Qwen tokenizer may produce different tokens
-    depending on context.
+    to avoid tokenization bias. Removes any tokens that appear in BOTH
+    to avoid ambiguity (e.g., NONSPEECH may contain SPEECH as sub-tokens).
 
     Returns:
-        ids_SPEECH, ids_NONSPEECH: Lists of token IDs (may contain multiple variants)
+        ids_SPEECH, ids_NONSPEECH: Lists of token IDs (no overlap)
     """
     # Tokenize 'SPEECH' and 'NONSPEECH' with and without leading space
     ids_SPEECH = []
@@ -53,7 +53,7 @@ def get_speech_nonspeech_token_ids(tokenizer):
     ids_SPEECH_space = tokenizer.encode(' SPEECH', add_special_tokens=False)
     ids_NONSPEECH_space = tokenizer.encode(' NONSPEECH', add_special_tokens=False)
 
-    # Add space variants (avoiding duplicates)
+    # Add space variants (avoiding duplicates within each list)
     for id_val in ids_SPEECH_space:
         if id_val not in ids_SPEECH:
             ids_SPEECH.append(id_val)
@@ -62,8 +62,22 @@ def get_speech_nonspeech_token_ids(tokenizer):
         if id_val not in ids_NONSPEECH:
             ids_NONSPEECH.append(id_val)
 
-    print(f"Token IDs for 'SPEECH' (including ' SPEECH'): {ids_SPEECH}")
-    print(f"Token IDs for 'NONSPEECH' (including ' NONSPEECH'): {ids_NONSPEECH}")
+    print(f"Token IDs for 'SPEECH' (before dedup): {ids_SPEECH}")
+    print(f"Token IDs for 'NONSPEECH' (before dedup): {ids_NONSPEECH}")
+
+    # CRITICAL: Remove tokens that appear in BOTH lists to avoid ambiguity
+    overlap = set(ids_SPEECH) & set(ids_NONSPEECH)
+    if overlap:
+        print(f"WARNING: Found {len(overlap)} overlapping tokens: {overlap}")
+        print(f"Removing overlapping tokens to avoid ambiguity...")
+        ids_SPEECH = [t for t in ids_SPEECH if t not in overlap]
+        ids_NONSPEECH = [t for t in ids_NONSPEECH if t not in overlap]
+
+    print(f"Token IDs for 'SPEECH' (after dedup): {ids_SPEECH}")
+    print(f"Token IDs for 'NONSPEECH' (after dedup): {ids_NONSPEECH}")
+
+    if not ids_SPEECH or not ids_NONSPEECH:
+        raise ValueError("ERROR: After removing overlap, one of the token lists is empty!")
 
     return ids_SPEECH, ids_NONSPEECH
 
