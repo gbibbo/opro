@@ -262,6 +262,9 @@ def main():
         print(f"Using custom prompt: {args.prompt[:80]}..." if len(args.prompt) > 80 else f"Using custom prompt: {args.prompt}")
     for idx, row in tqdm(test_df.iterrows(), total=len(test_df)):
         audio_path = row['audio_path']
+        # Prepend 'data/' if path doesn't start with it
+        if not audio_path.startswith('data/'):
+            audio_path = 'data/' + audio_path
         ground_truth = row[label_col]
         ground_truth_token = label_map[ground_truth]
 
