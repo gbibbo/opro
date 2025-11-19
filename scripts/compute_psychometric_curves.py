@@ -42,6 +42,11 @@ def compute_accuracy_by_condition(df, group_col):
     for val, group in df.groupby(group_col):
         acc = (group['prediction'] == group['ground_truth']).mean() * 100
         results.append({'value': val, 'accuracy': acc, 'n': len(group)})
+
+    if not results:
+        # Return empty DataFrame with correct columns if no results
+        return pd.DataFrame(columns=['value', 'accuracy', 'n'])
+
     return pd.DataFrame(results).sort_values('value')
 
 
@@ -54,8 +59,12 @@ def bootstrap_threshold(df, group_col, target_accuracy, n_iter=1000, percentiles
         sample = df.sample(frac=1, replace=True)
         acc_df = compute_accuracy_by_condition(sample, group_col)
 
+        # Skip if not enough data points
+        if len(acc_df) < 2:
+            continue
+
         # Interpolate to find threshold
-        if len(acc_df) > 1 and acc_df['accuracy'].min() < target_accuracy < acc_df['accuracy'].max():
+        if acc_df['accuracy'].min() < target_accuracy < acc_df['accuracy'].max():
             f = interp1d(acc_df['accuracy'], acc_df['value'], fill_value='extrapolate')
             thresh = float(f(target_accuracy))
             thresholds.append(thresh)
@@ -159,6 +168,10 @@ def plot_stratified_snr_curves(df, output_dir, durations=[20, 80, 200, 1000]):
             continue
 
         acc_by_snr = compute_accuracy_by_condition(df_dur, 'snr_db')
+
+        # Skip if no data points
+        if len(acc_by_snr) == 0:
+            continue
 
         ax = axes[idx]
         ax.plot(acc_by_snr['value'], acc_by_snr['accuracy'], 'o-', linewidth=2, markersize=6)
