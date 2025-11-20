@@ -1,11 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=train_qwen42
-#SBATCH --partition=3090
+#SBATCH --partition=2080ti
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=64G
 #SBATCH --time=04:00:00
-#SBATCH --constraint=fs_weka
 #SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro/logs/train_seed42_%j.out
 #SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro/logs/train_seed42_%j.err
 
