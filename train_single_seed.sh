@@ -20,8 +20,11 @@ cd "$REPO"
 
 export HF_HOME="/mnt/fast/nobackup/users/gb0048/.cache/huggingface"
 export TRANSFORMERS_CACHE="$HF_HOME/transformers"
-export HF_HUB_CACHE="$HF_HOME/hub"
+export HF_HUB_CACHE="$HF_HUB_CACHE"
 mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+
+# Fix CUDA OOM: Enable expandable memory segments to avoid fragmentation
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 echo "[RUN] Training Qwen2-Audio with LoRA (seed 42)"
 apptainer exec --nv \
@@ -35,7 +38,7 @@ apptainer exec --nv \
   --seed 42 \
   --num_epochs 3 \
   --learning_rate 5e-5 \
-  --batch_size 1 \
+  --per_device_train_batch_size 1 \
   --gradient_accumulation_steps 8
 
 echo "[DONE] End: $(date)"
