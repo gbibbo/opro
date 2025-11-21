@@ -23,7 +23,7 @@ REPO="/mnt/fast/nobackup/users/gb0048/opro"
 CONTAINER="$REPO/qwen_pipeline_v2.sif"
 
 # Configurable via environment variables
-TEST_CSV="${TEST_CSV:-data/processed/grouped_split_with_dev/test_metadata.csv}"
+TEST_CSV="${TEST_CSV:-data/processed/grouped_split/test_metadata.csv}"
 PROMPT_FILE="${PROMPT_FILE:-prompts/prompt_base.txt}"
 FILTER_DURATION="${FILTER_DURATION:-}"
 FILTER_SNR="${FILTER_SNR:-}"
