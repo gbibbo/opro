@@ -14,7 +14,7 @@
 #
 # Optional environment variables for filtering:
 #   FILTER_DURATION=1000 FILTER_SNR=20 sbatch eval_model.sh --no-lora
-#   TEST_CSV=data/processed/experimental_variants/test_metadata.csv sbatch eval_model.sh --no-lora
+#   TEST_CSV=data/processed/grouped_split_with_dev/test_metadata.csv sbatch eval_model.sh --no-lora
 
 set -euo pipefail
 set -x
@@ -23,7 +23,7 @@ REPO="/mnt/fast/nobackup/users/gb0048/opro"
 CONTAINER="$REPO/qwen_pipeline_v2.sif"
 
 # Configurable via environment variables
-TEST_CSV="${TEST_CSV:-data/processed/experimental_variants/dev_metadata.csv}"
+TEST_CSV="${TEST_CSV:-data/processed/grouped_split_with_dev/test_metadata.csv}"
 PROMPT_FILE="${PROMPT_FILE:-prompts/prompt_base.txt}"
 FILTER_DURATION="${FILTER_DURATION:-}"
 FILTER_SNR="${FILTER_SNR:-}"
@@ -69,7 +69,7 @@ apptainer exec --nv \
   --env TRANSFORMERS_CACHE="$TRANSFORMERS_CACHE" \
   --env HF_HUB_CACHE="$HF_HUB_CACHE" \
   --env PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True" \
-  "$CONTAINER" python3 scripts/evaluate_with_logits.py \
+  "$CONTAINER" python3 scripts/evaluate_with_generation.py \
   $MODEL_ARGS \
   --test_csv "$TEST_CSV" \
   --prompt_file "$PROMPT_FILE" \

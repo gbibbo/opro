@@ -1,3 +1,5 @@
-Task: speech presence classification.
-Classes: A = SPEECH (human voice present), B = NONSPEECH (no human voice).
-Rules: Listen to the clip and output only a single uppercase letter: A or B. Do not include any other text.
+What is in this audio?
+A) Human speech
+B) Music
+C) Noise/silence
+D) Other sounds

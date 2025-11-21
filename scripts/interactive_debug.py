@@ -1,215 +1,168 @@
 #!/usr/bin/env python3
 """
 Interactive debugging script for speech classification.
-Run LOCALLY (not on cluster) to listen to audio and see predictions.
-
-Usage:
-    python scripts/interactive_debug.py --n_samples 10 --snr 20 --duration 1000
+Shows Qwen's actual generated response and input spectrogram.
 """
 
 import argparse
 import pandas as pd
-import torch
 import soundfile as sf
 import numpy as np
-from pathlib import Path
 import os
 import sys
+import matplotlib.pyplot as plt
 
-# Try to import audio playback library
-try:
-    import sounddevice as sd
-    HAS_SOUNDDEVICE = True
-except ImportError:
-    HAS_SOUNDDEVICE = False
-    print("WARNING: sounddevice not installed. Install with: pip install sounddevice")
-    print("         Audio will be saved to files instead of playing directly.\n")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def play_audio(audio, sr):
-    """Play audio or save to temp file."""
-    if HAS_SOUNDDEVICE:
-        print("  [Playing audio... press Ctrl+C to skip]")
-        try:
-            sd.play(audio, sr)
-            sd.wait()
-        except KeyboardInterrupt:
-            sd.stop()
-            print("  [Stopped]")
-    else:
-        temp_path = "temp_debug_audio.wav"
-        sf.write(temp_path, audio, sr)
-        print(f"  [Audio saved to: {temp_path}]")
-        print(f"  [Open it manually to listen]")
+def save_spectrogram(audio, sr, output_path="debug_spectrogram.png"):
+    """Save spectrogram of the audio that Qwen receives."""
+    fig, axes = plt.subplots(2, 1, figsize=(12, 6))
+
+    # Waveform
+    time = np.arange(len(audio)) / sr
+    axes[0].plot(time, audio, linewidth=0.5)
+    axes[0].set_xlabel("Time (s)")
+    axes[0].set_ylabel("Amplitude")
+    axes[0].set_title(f"Waveform - {len(audio)/sr:.2f}s @ {sr}Hz")
+    axes[0].set_xlim(0, len(audio)/sr)
+
+    # Spectrogram
+    axes[1].specgram(audio, Fs=sr, NFFT=512, noverlap=256, cmap='viridis')
+    axes[1].set_xlabel("Time (s)")
+    axes[1].set_ylabel("Frequency (Hz)")
+    axes[1].set_title("Spectrogram (what Qwen sees)")
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=100)
+    plt.close()
+    return output_path
 
 
 def main():
     parser = argparse.ArgumentParser(description="Interactive audio debugging")
-    parser.add_argument("--test_csv", type=str, default="data/processed/experimental_variants/dev_metadata.csv")
-    parser.add_argument("--n_samples", type=int, default=5, help="Number of samples to test")
-    parser.add_argument("--snr", type=float, default=None, help="Filter by SNR (e.g., 20)")
-    parser.add_argument("--duration", type=int, default=None, help="Filter by duration in ms (e.g., 1000)")
-    parser.add_argument("--label", type=str, default=None, choices=["SPEECH", "NONSPEECH"], help="Filter by label")
-    parser.add_argument("--no-model", action="store_true", help="Skip model loading (just play audio)")
-    parser.add_argument("--prompt_file", type=str, default="prompts/prompt_base.txt", help="Prompt file to use")
+    parser.add_argument("--test_csv", type=str, default="data/processed/grouped_split_with_dev/dev_metadata.csv")
+    parser.add_argument("--n_samples", type=int, default=5)
+    parser.add_argument("--snr", type=float, default=20)
+    parser.add_argument("--duration", type=int, default=1000)
+    parser.add_argument("--label", type=str, default=None, choices=["SPEECH", "NONSPEECH"])
+    parser.add_argument("--no-model", action="store_true")
     args = parser.parse_args()
 
+    # Default open-ended prompt
+    prompt_text = "What do you hear in this audio? Describe it."
+
     # Load and filter data
-    print(f"Loading data from {args.test_csv}...")
     df = pd.read_csv(args.test_csv)
     label_col = 'ground_truth' if 'ground_truth' in df.columns else 'label'
 
-    print(f"Total samples: {len(df)}")
+    df = df[df['snr_db'] == args.snr]
+    df = df[df['duration_ms'] == args.duration]
 
-    if args.snr is not None:
-        df = df[df['snr_db'] == args.snr]
-        print(f"Filtered by SNR={args.snr}dB: {len(df)} samples")
-
-    if args.duration is not None:
-        df = df[df['duration_ms'] == args.duration]
-        print(f"Filtered by duration={args.duration}ms: {len(df)} samples")
-
-    if args.label is not None:
+    if args.label:
         df = df[df[label_col] == args.label]
-        print(f"Filtered by label={args.label}: {len(df)} samples")
 
-    # Sample
+    print(f"Samples: {len(df)} (duration={args.duration}ms, SNR={args.snr}dB)", flush=True)
+
+    if len(df) == 0:
+        print("No samples match filters!")
+        return
+
     if len(df) > args.n_samples:
         df = df.sample(n=args.n_samples, random_state=42)
 
-    print(f"\nWill test {len(df)} samples\n")
-
-    # Load prompt
-    prompt_text = None
-    if os.path.exists(args.prompt_file):
-        with open(args.prompt_file, 'r') as f:
-            prompt_text = f.read().strip()
-        print(f"Prompt ({args.prompt_file}):")
-        print("-" * 50)
-        print(prompt_text)
-        print("-" * 50)
-
-    # Load model if needed
+    # Load model
     model = None
     processor = None
-    ids_A = None
-    ids_B = None
 
     if not args.no_model:
-        print("\nLoading model (this may take a minute)...")
-        from transformers import Qwen2AudioForConditionalGeneration, AutoProcessor, BitsAndBytesConfig
+        print("\nLoading Qwen model...", flush=True)
+        from src.qsm.models.qwen_audio import Qwen2AudioClassifier
 
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type="nf4",
-        )
+        model = Qwen2AudioClassifier(load_in_4bit=True)
+        processor = model.processor
+        print("Model loaded!\n", flush=True)
 
-        model = Qwen2AudioForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-Audio-7B-Instruct",
-            quantization_config=bnb_config,
-            device_map="auto",
-            trust_remote_code=True,
-        )
-        model.eval()
+    # Process samples
+    i = 0
+    df_list = list(df.iterrows())
 
-        processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct", trust_remote_code=True)
-
-        # Get token IDs
-        tokens_a = processor.tokenizer.encode('A', add_special_tokens=False)
-        tokens_b = processor.tokenizer.encode('B', add_special_tokens=False)
-        ids_A = [tokens_a[0]]
-        ids_B = [tokens_b[0]]
-
-        print(f"Model loaded! A token: {ids_A[0]}, B token: {ids_B[0]}\n")
-
-    # Process each sample
-    print("=" * 70)
-    for i, (idx, row) in enumerate(df.iterrows()):
+    while i < len(df_list):
+        idx, row = df_list[i]
         audio_path = row['audio_path']
         if not audio_path.startswith('data/'):
             audio_path = 'data/' + audio_path
 
         ground_truth = row[label_col]
-        clip_id = row.get('clip_id', f'sample_{i}')
-        snr = row.get('snr_db', 'N/A')
-        duration = row.get('duration_ms', 'N/A')
 
-        print(f"\n[{i+1}/{len(df)}] {clip_id}")
-        print(f"  Ground Truth: {ground_truth}")
-        print(f"  Duration: {duration}ms | SNR: {snr}dB")
-        print(f"  Path: {audio_path}")
+        print("=" * 60, flush=True)
+        print(f"SAMPLE {i+1}/{len(df_list)}: {os.path.basename(audio_path)}", flush=True)
+        print(f"Ground Truth: {ground_truth}", flush=True)
+        print("-" * 60, flush=True)
+        print(f"PROMPT: {prompt_text}", flush=True)
+        print("-" * 60, flush=True)
 
-        # Load and play audio
-        if os.path.exists(audio_path):
-            audio, sr = sf.read(audio_path)
-            print(f"  Audio: {len(audio)} samples @ {sr}Hz ({len(audio)/sr:.2f}s)")
+        if not os.path.exists(audio_path):
+            print("ERROR: File not found!", flush=True)
+            i += 1
+            continue
 
-            # Play audio
-            play_audio(audio, sr)
+        # Load and process audio exactly as Qwen receives it
+        audio, sr = sf.read(audio_path)
 
-            # Get model prediction
-            if model is not None:
-                target_sr = processor.feature_extractor.sampling_rate
-                if sr != target_sr:
-                    import torchaudio.transforms as T
-                    resampler = T.Resample(orig_freq=sr, new_freq=target_sr)
-                    audio_resampled = resampler(torch.tensor(audio)).numpy()
-                else:
-                    audio_resampled = audio
+        # Resample to Qwen's expected sample rate if needed
+        if processor is not None:
+            target_sr = processor.feature_extractor.sampling_rate
+            if sr != target_sr:
+                import torchaudio.transforms as T
+                import torch
+                resampler = T.Resample(orig_freq=sr, new_freq=target_sr)
+                audio = resampler(torch.tensor(audio)).numpy()
+                sr = target_sr
 
-                conversation = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "audio", "audio_url": "placeholder"},
-                            {"type": "text", "text": prompt_text or "Does this contain speech? A=yes, B=no"}
-                        ]
-                    }
-                ]
+        print(f"Audio: {len(audio)/sr:.2f}s @ {sr}Hz", flush=True)
 
-                text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-                inputs = processor(
-                    text=[text_prompt],
-                    audio=[audio_resampled],
-                    sampling_rate=target_sr,
-                    return_tensors="pt",
-                    padding=True
-                )
-                inputs = {k: v.to(model.device) for k, v in inputs.items()}
+        # Save spectrogram of what Qwen receives
+        spec_path = save_spectrogram(audio, sr)
+        print(f"Spectrogram saved: {spec_path}", flush=True)
 
-                with torch.no_grad():
-                    outputs = model(**inputs)
+        if model is not None:
+            # Set the prompt and get prediction
+            model.user_prompt = prompt_text
+            result = model.predict(audio_path)
 
-                logits = outputs.logits[0, -1, :]
-                logit_A = logits[ids_A[0]].item()
-                logit_B = logits[ids_B[0]].item()
+            print("\n" + "=" * 60, flush=True)
+            print("QWEN'S RESPONSE:", flush=True)
+            print("=" * 60, flush=True)
+            response = result.raw_output
+            print(response, flush=True)
+            print("=" * 60, flush=True)
 
-                logit_diff = logit_A - logit_B
-                prob_A = torch.sigmoid(torch.tensor(logit_diff)).item()
+        print("\nOptions:", flush=True)
+        print("  [Enter] Next sample", flush=True)
+        print("  [p]     Change prompt", flush=True)
+        print("  [q]     Quit", flush=True)
 
-                prediction = 'SPEECH' if prob_A > 0.5 else 'NONSPEECH'
-                correct = "✓" if prediction == ground_truth else "✗"
-
-                print(f"\n  MODEL PREDICTION: {prediction} {correct}")
-                print(f"  Logit A (SPEECH): {logit_A:.3f}")
-                print(f"  Logit B (NONSPEECH): {logit_B:.3f}")
-                print(f"  Logit diff (A-B): {logit_diff:.3f}")
-                print(f"  Prob(SPEECH): {prob_A:.3f}")
-        else:
-            print(f"  ERROR: File not found!")
-
-        print("-" * 70)
-
-        # Wait for user input
         try:
-            input("Press Enter for next sample (Ctrl+C to quit)...")
+            choice = input("\nYour choice: ").strip().lower()
+
+            if choice == 'q':
+                print("Exiting...")
+                break
+            elif choice == 'p':
+                new_prompt = input("Enter new prompt: ").strip()
+                if new_prompt:
+                    prompt_text = new_prompt
+                    print(f"Prompt changed to: {prompt_text}")
+                # Don't increment i, repeat same sample with new prompt
+            else:
+                i += 1  # Next sample
+
         except KeyboardInterrupt:
-            print("\n\nExiting...")
+            print("\n")
             break
 
-    print("\nDone!")
+    print("Done!")
 
 
 if __name__ == "__main__":
