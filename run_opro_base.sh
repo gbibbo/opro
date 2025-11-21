@@ -34,7 +34,7 @@ apptainer exec --nv \
   --env TRANSFORMERS_CACHE="$TRANSFORMERS_CACHE" \
   --env HF_HUB_CACHE="$HF_HUB_CACHE" \
   --env PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True" \
-  "$CONTAINER" python3 scripts/opro_post_ft.py \
+  "$CONTAINER" python3 scripts/opro_post_ft_v2.py \
   --no_lora \
   --train_csv data/processed/experimental_variants/dev_metadata.csv \
   --output_dir results/opro_base \
