@@ -1,0 +1,4 @@
+Listen to this audio clip. Is there human voice or speech in it?
+A = Yes, human speech is present
+B = No, only noise/music/silence
+Answer with just A or B.

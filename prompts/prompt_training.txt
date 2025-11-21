@@ -1,0 +1,5 @@
+Choose one:
+A) SPEECH (human voice)
+B) NONSPEECH (music/noise/silence/animals)
+
+Answer with A or B ONLY.

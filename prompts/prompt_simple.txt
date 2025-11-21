@@ -1,0 +1,1 @@
+Does this audio contain human speech? Answer A for yes (speech present) or B for no (no speech).
