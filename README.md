@@ -11,6 +11,48 @@
 
 ---
 
+## 📋 Baseline Evaluation (Qwen2-Audio Base Model)
+
+### Script Usage
+
+```bash
+# Evaluate base Qwen2-Audio model (no fine-tuning)
+sbatch eval_model.sh --no-lora
+```
+
+**Output**: Results saved to `results/eval_baseline.csv`
+
+### Default Prompt (4-option multiple choice)
+
+```
+What is in this audio?
+A) Human speech
+B) Music
+C) Noise/silence
+D) Other sounds
+```
+
+### Baseline Results (Full Test Set)
+
+```
+============================================================
+RESULTS
+============================================================
+Total samples: 1152
+Correct: 777
+ACCURACY: 67.45%
+SPEECH accuracy: 59.90% (345/576)
+NONSPEECH accuracy: 75.00% (432/576)
+```
+
+**Key Observations**:
+- **Overall Performance**: 67.45% on full test set (1152 samples)
+- **Class Imbalance**: NONSPEECH performs better (75%) than SPEECH (59.9%)
+- **Model Behavior**: Base model without fine-tuning shows preference for NONSPEECH classification
+- **Comparison**: This provides the baseline for prompt optimization (OPRO) experiments
+
+---
+
 ## 🎯 Quick Results
 
 ### Main Achievement: 100% Accuracy with Threshold Optimization
