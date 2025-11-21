@@ -316,8 +316,10 @@ def opro_optimize(model, processor, train_df, ids_A, ids_B,
 
 def main():
     parser = argparse.ArgumentParser(description="OPRO Post Fine-Tuning")
-    parser.add_argument('--checkpoint', type=str, required=True,
+    parser.add_argument('--checkpoint', type=str, default=None,
                         help='Path to fine-tuned model checkpoint')
+    parser.add_argument('--no_lora', action='store_true',
+                        help='Use base model without LoRA')
     parser.add_argument('--train_csv', type=str, required=True,
                         help='CSV with training/dev samples for optimization')
     parser.add_argument('--output_dir', type=str, required=True,
@@ -335,6 +337,10 @@ def main():
 
     args = parser.parse_args()
 
+    # Validate args
+    if not args.no_lora and args.checkpoint is None:
+        parser.error("--checkpoint is required unless --no_lora is specified")
+
     # Set seed
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -345,19 +351,39 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 80)
-    print("OPRO POST FINE-TUNING: Prompt Optimization on Frozen Model")
+    print("OPRO: Prompt Optimization on Frozen Model")
     print("=" * 80)
-    print(f"\nCheckpoint: {args.checkpoint}")
+    print(f"\nModel: {'BASE (no LoRA)' if args.no_lora else args.checkpoint}")
     print(f"Train CSV: {args.train_csv}")
     print(f"Output: {args.output_dir}")
 
     # Load model
-    print(f"\nLoading fine-tuned model...")
-    model = Qwen2AudioForConditionalGeneration.from_pretrained(
-        args.checkpoint,
-        device_map="auto",
-        torch_dtype=torch.float16
-    )
+    if args.no_lora:
+        print(f"\nLoading BASE model...")
+        from transformers import BitsAndBytesConfig
+
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+            llm_int8_enable_fp32_cpu_offload=True,
+        )
+
+        model = Qwen2AudioForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2-Audio-7B-Instruct",
+            quantization_config=bnb_config,
+            device_map="auto",
+            torch_dtype=torch.float16
+        )
+    else:
+        print(f"\nLoading fine-tuned model from {args.checkpoint}...")
+        model = Qwen2AudioForConditionalGeneration.from_pretrained(
+            args.checkpoint,
+            device_map="auto",
+            torch_dtype=torch.float16
+        )
+
     model.eval()  # Inference mode
 
     # Freeze all parameters
