@@ -39,37 +39,37 @@ import sys
 sys.path.append(str(Path(__file__).parent))
 
 
-def get_ab_token_ids(tokenizer):
+def get_abcd_token_ids(tokenizer):
     """
-    Get all token IDs that represent 'A' or 'B'.
+    Get all token IDs that represent 'A', 'B', 'C', or 'D'.
     Handles both variants (with and without leading space).
     """
     ids_A = []
     ids_B = []
+    ids_C = []
+    ids_D = []
 
     # Variant 1: No space
     ids_A.extend(tokenizer.encode('A', add_special_tokens=False))
     ids_B.extend(tokenizer.encode('B', add_special_tokens=False))
+    ids_C.extend(tokenizer.encode('C', add_special_tokens=False))
+    ids_D.extend(tokenizer.encode('D', add_special_tokens=False))
 
     # Variant 2: Leading space
-    ids_A_space = tokenizer.encode(' A', add_special_tokens=False)
-    ids_B_space = tokenizer.encode(' B', add_special_tokens=False)
+    for ids_list, letter in [(ids_A, 'A'), (ids_B, 'B'), (ids_C, 'C'), (ids_D, 'D')]:
+        space_ids = tokenizer.encode(f' {letter}', add_special_tokens=False)
+        for id_val in space_ids:
+            if id_val not in ids_list:
+                ids_list.append(id_val)
 
-    # Add space variants (avoiding duplicates)
-    for id_val in ids_A_space:
-        if id_val not in ids_A:
-            ids_A.append(id_val)
-    for id_val in ids_B_space:
-        if id_val not in ids_B:
-            ids_B.append(id_val)
-
-    return ids_A, ids_B
+    return ids_A, ids_B, ids_C, ids_D
 
 
-def evaluate_sample_logits(model, processor, audio_path, ids_A, ids_B,
+def evaluate_sample_logits(model, processor, audio_path, ids_A, ids_B, ids_C, ids_D,
                            system_prompt, user_prompt, temperature=1.0):
     """
     Evaluate single sample using logit extraction.
+    Uses 4-option format: A=SPEECH, B/C/D=NONSPEECH
     """
     import soundfile as sf
 
@@ -106,35 +106,47 @@ def evaluate_sample_logits(model, processor, audio_path, ids_A, ids_B,
     # Extract logits for last position
     logits = outputs.logits[0, -1, :]
 
-    # Get logits for A and B tokens
+    # Get logits for all 4 options
     logits_A = logits[ids_A]
     logits_B = logits[ids_B]
+    logits_C = logits[ids_C]
+    logits_D = logits[ids_D]
 
     # Apply temperature
     logits_A = logits_A / temperature
     logits_B = logits_B / temperature
+    logits_C = logits_C / temperature
+    logits_D = logits_D / temperature
 
     # Aggregate using logsumexp
     logit_A = torch.logsumexp(logits_A, dim=0).item()
     logit_B = torch.logsumexp(logits_B, dim=0).item()
+    logit_C = torch.logsumexp(logits_C, dim=0).item()
+    logit_D = torch.logsumexp(logits_D, dim=0).item()
+
+    # Map to SPEECH (A) vs NONSPEECH (B/C/D)
+    # Option A = SPEECH (Human speech)
+    # Options B/C/D = NONSPEECH (Music/Noise/Other)
+    logit_speech = logit_A
+    logit_nonspeech = torch.logsumexp(torch.tensor([logit_B, logit_C, logit_D]), dim=0).item()
 
     # Compute probabilities
-    logit_diff = logit_A - logit_B
-    prob_A = torch.sigmoid(torch.tensor(logit_diff)).item()
-    prob_B = 1.0 - prob_A
+    logit_diff = logit_speech - logit_nonspeech
+    prob_speech = torch.sigmoid(torch.tensor(logit_diff)).item()
+    prob_nonspeech = 1.0 - prob_speech
 
-    # Prediction
-    prediction = 'A' if prob_A > prob_B else 'B'
+    # Prediction: A if speech, B if nonspeech (for ground truth comparison)
+    prediction = 'A' if prob_speech > prob_nonspeech else 'B'
 
     return {
         'prediction': prediction,
-        'confidence': max(prob_A, prob_B),
-        'prob_A': prob_A,
-        'prob_B': prob_B
+        'confidence': max(prob_speech, prob_nonspeech),
+        'prob_A': prob_speech,
+        'prob_B': prob_nonspeech
     }
 
 
-def evaluate_prompt_on_samples(model, processor, ids_A, ids_B, samples,
+def evaluate_prompt_on_samples(model, processor, ids_A, ids_B, ids_C, ids_D, samples,
                                 system_prompt, user_prompt, temperature=1.0):
     """
     Evaluate a prompt on a set of samples.
@@ -142,13 +154,14 @@ def evaluate_prompt_on_samples(model, processor, ids_A, ids_B, samples,
     """
     correct = 0
     total = len(samples)
+    errors = []
 
     for sample in tqdm(samples, desc="Evaluating prompt", leave=False):
         try:
             result = evaluate_sample_logits(
                 model, processor,
                 sample['audio_path'],
-                ids_A, ids_B,
+                ids_A, ids_B, ids_C, ids_D,
                 system_prompt, user_prompt,
                 temperature
             )
@@ -156,8 +169,17 @@ def evaluate_prompt_on_samples(model, processor, ids_A, ids_B, samples,
             if result['prediction'] == sample['ground_truth_token']:
                 correct += 1
         except Exception as e:
-            print(f"Error evaluating {sample['audio_path']}: {e}")
+            error_msg = f"{sample['audio_path']}: {str(e)[:50]}"
+            errors.append(error_msg)
             continue
+
+    # Print error summary if there were errors
+    if errors:
+        print(f"\n⚠️  {len(errors)}/{total} samples failed")
+        for err in errors[:3]:  # Show first 3 errors
+            print(f"  - {err}")
+        if len(errors) > 3:
+            print(f"  ... and {len(errors) - 3} more")
 
     accuracy = correct / total if total > 0 else 0.0
     return accuracy
@@ -180,35 +202,37 @@ def generate_candidate_prompts(prompt_history, num_candidates=8, use_llm=False):
         raise NotImplementedError("LLM-based generation requires API access")
 
     # Template-based generation (fallback)
+    # All templates use 4-option format: A=Speech, B=Music, C=Noise/silence, D=Other
     templates = [
-        # Baseline
-        "Choose one:\nA) SPEECH (human voice)\nB) NONSPEECH (music/noise/silence/animals)\n\nAnswer with A or B ONLY.",
+        # Baseline (from prompts/prompt_base.txt)
+        "What is in this audio?\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
 
-        # Emphasis variations
-        "Listen carefully. Choose:\nA) SPEECH (human voice speaking)\nB) NONSPEECH (music, noise, silence, animals)\n\nAnswer A or B.",
-
-        "Classify this audio:\nA) SPEECH - human voice, talking, speaking\nB) NONSPEECH - music, noise, environmental sounds, animals\n\nYour answer (A or B):",
-
-        # Task framing
-        "Your task: Detect if this audio contains speech.\nA) SPEECH (any human voice)\nB) NONSPEECH (no human voice)\n\nAnswer:",
-
-        # Decision-focused
-        "Does this audio contain human speech?\nA) Yes (SPEECH)\nB) No (NONSPEECH)\n\nAnswer A or B only.",
-
-        # Feature-focused
-        "Analyze the audio features. Is there human vocal activity?\nA) SPEECH detected\nB) NONSPEECH (music/noise/silence/other)\n\nAnswer:",
-
-        # Detailed
-        "Audio classification task:\n- A: SPEECH (human voice, talking, vocalizations)\n- B: NONSPEECH (music, environmental sounds, noise, silence, non-human)\n\nYour classification:",
-
-        # Simple
-        "A) SPEECH\nB) NONSPEECH\n\nWhich one?",
+        # Explicit instruction
+        "Listen carefully and select one option:\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
 
         # Question format
-        "Is this audio speech or non-speech?\nA) SPEECH\nB) NONSPEECH\n\nAnswer:",
+        "What type of audio is this?\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
 
-        # Instruction format
-        "Identify the audio type. Select one:\nA) SPEECH (human speaking)\nB) NONSPEECH (other sounds)\n\nSelection:",
+        # Classify format
+        "Classify this audio content:\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
+
+        # Task framing
+        "Identify the audio content. Choose one:\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
+
+        # Detailed descriptions
+        "What is in this audio?\nA) Human speech (talking, speaking, vocalizations)\nB) Music (instruments, singing)\nC) Noise or silence (background noise, quiet)\nD) Other sounds (animals, environment)",
+
+        # Simple/direct
+        "Select one:\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
+
+        # Instruction style
+        "Audio classification:\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds\n\nYour answer:",
+
+        # Emphatic
+        "Listen to this audio. What do you hear?\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
+
+        # Analysis framing
+        "Analyze this audio and categorize it:\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
     ]
 
     # If we have history, weight towards better performing variations
@@ -229,7 +253,7 @@ def generate_candidate_prompts(prompt_history, num_candidates=8, use_llm=False):
     return candidates
 
 
-def opro_optimize(model, processor, train_df, ids_A, ids_B,
+def opro_optimize(model, processor, train_df, ids_A, ids_B, ids_C, ids_D,
                   num_iterations=20, samples_per_iter=10,
                   num_candidates=8, temperature=1.0):
     """
@@ -239,7 +263,7 @@ def opro_optimize(model, processor, train_df, ids_A, ids_B,
         model: Fine-tuned frozen model
         processor: Qwen2Audio processor
         train_df: DataFrame with training samples
-        ids_A, ids_B: Token IDs for A and B
+        ids_A, ids_B, ids_C, ids_D: Token IDs for A/B/C/D options
         num_iterations: Number of optimization iterations
         samples_per_iter: Number of samples to evaluate per iteration
         num_candidates: Number of candidate prompts per iteration
@@ -254,6 +278,7 @@ def opro_optimize(model, processor, train_df, ids_A, ids_B,
     samples = []
     for _, row in train_df.iterrows():
         # Map SPEECH/NONSPEECH to A/B tokens
+        # A = SPEECH (Human speech), B = NONSPEECH (mapped from B/C/D options)
         ground_truth = row['ground_truth']
         ground_truth_token = 'A' if ground_truth == 'SPEECH' else 'B'
 
@@ -263,7 +288,9 @@ def opro_optimize(model, processor, train_df, ids_A, ids_B,
         })
 
     prompt_history = []  # List of (prompt, accuracy) tuples
-    best_prompt = None
+
+    # Initialize with baseline prompt (from prompts/prompt_base.txt)
+    best_prompt = "What is in this audio?\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds"
     best_accuracy = 0.0
 
     print(f"\nStarting OPRO optimization:")
@@ -271,6 +298,7 @@ def opro_optimize(model, processor, train_df, ids_A, ids_B,
     print(f"  Samples per iteration: {samples_per_iter}")
     print(f"  Candidates per iteration: {num_candidates}")
     print(f"  Total samples: {len(samples)}")
+    print(f"  Baseline prompt: {best_prompt}")
     print()
 
     for iteration in range(num_iterations):
@@ -293,7 +321,7 @@ def opro_optimize(model, processor, train_df, ids_A, ids_B,
             print(f"  {prompt[:80]}...")
 
             accuracy = evaluate_prompt_on_samples(
-                model, processor, ids_A, ids_B,
+                model, processor, ids_A, ids_B, ids_C, ids_D,
                 iter_samples, system_prompt, prompt, temperature
             )
 
@@ -401,9 +429,9 @@ def main():
     print(f"\nLoading processor...")
     processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 
-    # Get token IDs
-    ids_A, ids_B = get_ab_token_ids(processor.tokenizer)
-    print(f"Token IDs: A={ids_A}, B={ids_B}")
+    # Get token IDs for A/B/C/D options
+    ids_A, ids_B, ids_C, ids_D = get_abcd_token_ids(processor.tokenizer)
+    print(f"Token IDs: A={ids_A}, B={ids_B}, C={ids_C}, D={ids_D}")
 
     # Load data
     print(f"\nLoading training data...")
@@ -414,7 +442,7 @@ def main():
 
     # Run OPRO
     best_prompt, best_accuracy, history = opro_optimize(
-        model, processor, train_df, ids_A, ids_B,
+        model, processor, train_df, ids_A, ids_B, ids_C, ids_D,
         num_iterations=args.num_iterations,
         samples_per_iter=args.samples_per_iter,
         num_candidates=args.num_candidates,
