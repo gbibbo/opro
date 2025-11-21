@@ -31,6 +31,17 @@ def evaluate_sample_with_model(model, audio_path, ground_truth):
     Returns:
         correct: bool (whether prediction matches ground truth)
     """
+    import os
+
+    # Ensure path exists - add data/ prefix if needed
+    if not os.path.exists(audio_path):
+        if not audio_path.startswith('data/'):
+            audio_path = 'data/' + audio_path
+
+    if not os.path.exists(audio_path):
+        print(f"  ERROR: File not found: {audio_path}")
+        return False
+
     try:
         result = model.predict(audio_path)
         prediction = result.label
@@ -39,7 +50,7 @@ def evaluate_sample_with_model(model, audio_path, ground_truth):
         # Model returns SPEECH/NONSPEECH directly
         return prediction == ground_truth
     except Exception as e:
-        print(f"  Error on {audio_path}: {e}")
+        print(f"  Error processing {audio_path}: {e}")
         return False
 
 
