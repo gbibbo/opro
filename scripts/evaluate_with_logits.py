@@ -225,8 +225,31 @@ def main():
         default=8,
         help="Batch size for evaluation (default: 8)"
     )
+    parser.add_argument(
+        "--prompt_file",
+        type=str,
+        default=None,
+        help="Path to file containing prompt text (alternative to --prompt)"
+    )
+    parser.add_argument(
+        "--filter_duration",
+        type=int,
+        default=None,
+        help="Filter test set by duration in ms (e.g., 1000)"
+    )
+    parser.add_argument(
+        "--filter_snr",
+        type=float,
+        default=None,
+        help="Filter test set by SNR in dB (e.g., 20)"
+    )
 
     args = parser.parse_args()
+
+    # Load prompt from file if specified
+    if args.prompt_file:
+        with open(args.prompt_file, 'r') as f:
+            args.prompt = f.read().strip()
 
     # Validate arguments
     if not args.no_lora and args.checkpoint is None:
@@ -281,7 +304,26 @@ def main():
     # Load test data
     print(f"\nLoading test data from {args.test_csv}")
     test_df = pd.read_csv(args.test_csv)
-    print(f"Test samples: {len(test_df)}")
+    print(f"Test samples (total): {len(test_df)}")
+
+    # Apply filters if specified
+    if args.filter_duration is not None:
+        if 'duration_ms' in test_df.columns:
+            orig_len = len(test_df)
+            test_df = test_df[test_df['duration_ms'] == args.filter_duration]
+            print(f"  Filtered by duration={args.filter_duration}ms: {orig_len} -> {len(test_df)}")
+        else:
+            print(f"  WARNING: --filter_duration specified but 'duration_ms' column not found")
+
+    if args.filter_snr is not None:
+        if 'snr_db' in test_df.columns:
+            orig_len = len(test_df)
+            test_df = test_df[test_df['snr_db'] == args.filter_snr]
+            print(f"  Filtered by SNR={args.filter_snr}dB: {orig_len} -> {len(test_df)}")
+        else:
+            print(f"  WARNING: --filter_snr specified but 'snr_db' column not found")
+
+    print(f"Test samples (after filters): {len(test_df)}")
 
     # Determine label column
     label_col = 'ground_truth' if 'ground_truth' in test_df.columns else 'label'
