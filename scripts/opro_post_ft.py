@@ -253,9 +253,13 @@ def opro_optimize(model, processor, train_df, ids_A, ids_B,
     # Prepare samples
     samples = []
     for _, row in train_df.iterrows():
+        # Map SPEECH/NONSPEECH to A/B tokens
+        ground_truth = row['ground_truth']
+        ground_truth_token = 'A' if ground_truth == 'SPEECH' else 'B'
+
         samples.append({
             'audio_path': row['audio_path'],
-            'ground_truth_token': row['ground_truth_token']
+            'ground_truth_token': ground_truth_token
         })
 
     prompt_history = []  # List of (prompt, accuracy) tuples
