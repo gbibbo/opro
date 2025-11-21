@@ -187,8 +187,13 @@ def main():
     parser.add_argument(
         "--checkpoint",
         type=str,
-        required=True,
-        help="Path to fine-tuned checkpoint"
+        default=None,
+        help="Path to fine-tuned checkpoint (required unless --no-lora)"
+    )
+    parser.add_argument(
+        "--no-lora",
+        action="store_true",
+        help="Evaluate base model without LoRA adapter (baseline)"
     )
     parser.add_argument(
         "--test_csv",
@@ -223,13 +228,24 @@ def main():
 
     args = parser.parse_args()
 
+    # Validate arguments
+    if not args.no_lora and args.checkpoint is None:
+        parser.error("--checkpoint is required unless --no-lora is specified")
+
     print("="*60)
-    print("LOGIT-BASED EVALUATION (No Generate)")
+    if args.no_lora:
+        print("LOGIT-BASED EVALUATION - BASE MODEL (No LoRA)")
+    else:
+        print("LOGIT-BASED EVALUATION - FINETUNED MODEL")
     print("="*60)
 
     # Load model
-    print(f"\nLoading model from {args.checkpoint}")
     base_model_id = "Qwen/Qwen2-Audio-7B-Instruct"
+
+    if args.no_lora:
+        print(f"\nLoading BASE model (no LoRA): {base_model_id}")
+    else:
+        print(f"\nLoading finetuned model from {args.checkpoint}")
 
     from transformers import BitsAndBytesConfig
 
@@ -249,8 +265,9 @@ def main():
         low_cpu_mem_usage=True,
     )
 
-    # Load LoRA adapter
-    model = PeftModel.from_pretrained(model, args.checkpoint)
+    # Load LoRA adapter only if not using base model
+    if not args.no_lora:
+        model = PeftModel.from_pretrained(model, args.checkpoint)
     model.eval()
 
     print(f"Model loaded on: {model.device}")
