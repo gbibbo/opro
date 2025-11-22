@@ -1,0 +1,97 @@
+{
+  "format": "labels",
+  "label_space": ["SPEECH", "NONSPEECH"],
+  "description": "Direct label output prompts requesting SPEECH or NONSPEECH responses.",
+  "templates": [
+    {
+      "id": "labels_01",
+      "text": "Does this audio contain human speech? Answer exactly one token: SPEECH or NONSPEECH.",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "labels_02",
+      "text": "Binary decision. Output exactly one token: SPEECH or NONSPEECH.",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "labels_03",
+      "text": "Decide the dominant content.\nDefinitions:\n- SPEECH = human voice, spoken words, syllables, conversational cues.\n- NONSPEECH = music, tones/beeps, environmental noise, silence.\nOutput exactly: SPEECH or NONSPEECH.",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "labels_04",
+      "text": "Detect human speech. Treat the following as NONSPEECH: pure tones/beeps, clicks, clock ticks, music, environmental noise, silence.\nAnswer: SPEECH or NONSPEECH.",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "labels_05",
+      "text": "Example:\nAudio→ crowd noise, music → Output: NONSPEECH\nNow classify the new audio. Output exactly ONE token: SPEECH or NONSPEECH.",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "labels_06",
+      "text": "Make a definite decision for the clip.\nOutput exactly one token: SPEECH or NONSPEECH.",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "labels_07",
+      "text": "Label SPEECH only if human voice is clearly present; otherwise label NONSPEECH.\nAnswer: SPEECH or NONSPEECH.",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "labels_08",
+      "text": "If there is any hint of human voice (even faint/short), label SPEECH; otherwise NONSPEECH.\nAnswer: SPEECH or NONSPEECH.",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "labels_09",
+      "text": "Focus on cues of human vocal tract (formants, syllabic rhythm, consonant onsets).\nAnswer exactly: SPEECH or NONSPEECH.",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "labels_10",
+      "text": "TASK: Speech detection. Is human voice/speech present in this audio?\nAnswer: SPEECH or NONSPEECH.",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "labels_11",
+      "text": "Binary classification task.\nQ: Does this contain human speech?\nIf confident YES → SPEECH\nIf confident NO → NONSPEECH\nAnswer:",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "labels_12",
+      "text": "You will answer with one token only.\n<question>Does this audio contain human speech?</question>\n<answer>SPEECH or NONSPEECH only</answer>",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "labels_13",
+      "text": "Classify this audio. Output only: SPEECH or NONSPEECH.",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "labels_14",
+      "text": "Listen for human voice. If present: SPEECH. Otherwise: NONSPEECH.\nAnswer:",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "labels_15",
+      "text": "Human speech present? Answer: SPEECH or NONSPEECH.",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    }
+  ]
+}

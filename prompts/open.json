@@ -1,0 +1,79 @@
+{
+  "format": "open",
+  "label_space": ["SPEECH", "NONSPEECH"],
+  "description": "Open-ended prompts that allow free-form responses. Normalized via semantic matching.",
+  "templates": [
+    {
+      "id": "open_01",
+      "text": "What do you hear in this audio?",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH", "voice", "talking", "music", "noise", "silence"]
+    },
+    {
+      "id": "open_02",
+      "text": "Describe the content of this audio clip.",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH", "speech", "voice", "music", "sound", "noise"]
+    },
+    {
+      "id": "open_03",
+      "text": "Listen carefully. What is the primary sound source?",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH", "human", "voice", "instrument", "noise"]
+    },
+    {
+      "id": "open_04",
+      "text": "Identify the type of audio: speech, music, noise, or other?",
+      "mapping": null,
+      "verbalizers": ["speech", "music", "noise", "other", "SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "open_05",
+      "text": "Is there human speech in this recording? Explain briefly.",
+      "mapping": null,
+      "verbalizers": ["yes", "no", "speech", "voice", "talking", "SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "open_06",
+      "text": "Classify this audio and provide your reasoning.",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH", "speech", "voice", "music", "noise"]
+    },
+    {
+      "id": "open_07",
+      "text": "What category does this audio belong to?",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH", "speech", "music", "noise", "silence"]
+    },
+    {
+      "id": "open_08",
+      "text": "Describe the acoustic characteristics of this audio.",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH", "voice", "vocal", "musical", "noise"]
+    },
+    {
+      "id": "open_09",
+      "text": "Example: [beeping] = tones/beeps\nWhat is in this new audio?",
+      "mapping": null,
+      "verbalizers": ["SPEECH", "NONSPEECH", "speech", "voice", "music", "tones", "noise"]
+    },
+    {
+      "id": "open_10",
+      "text": "Based on what you hear, classify this as speech or non-speech. Explain why.",
+      "mapping": null,
+      "verbalizers": ["speech", "non-speech", "SPEECH", "NONSPEECH", "voice", "music"]
+    },
+    {
+      "id": "open_11",
+      "text": "Listen to the audio. Is it human voice, music, noise, or something else?",
+      "mapping": null,
+      "verbalizers": ["human voice", "music", "noise", "SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "open_12",
+      "text": "Analyze this audio and tell me if it contains spoken words.",
+      "mapping": null,
+      "verbalizers": ["yes", "no", "words", "speech", "SPEECH", "NONSPEECH"]
+    }
+  ]
+}

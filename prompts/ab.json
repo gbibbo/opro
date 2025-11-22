@@ -1,0 +1,79 @@
+{
+  "format": "ab",
+  "label_space": ["SPEECH", "NONSPEECH"],
+  "description": "Binary A/B format prompts for speech detection. A always maps to SPEECH, B to NONSPEECH.",
+  "templates": [
+    {
+      "id": "ab_01",
+      "text": "Does this audio contain human speech?\nA) Yes\nB) No",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "ab_02",
+      "text": "Classify this audio clip:\nA) Human speech present\nB) No human speech",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "ab_03",
+      "text": "Listen to the audio. Is there human voice?\nA) Speech detected\nB) No speech detected",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "ab_04",
+      "text": "Audio content classification:\nA) Contains human vocal communication\nB) Does not contain human vocal communication",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "ab_05",
+      "text": "Binary decision - does this clip contain speech?\nA) Yes, speech is present\nB) No, speech is absent",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "ab_06",
+      "text": "Detect human voice in audio:\nA) Human voice detected (syllables, words, conversational cues)\nB) No human voice detected",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "ab_07",
+      "text": "Task: Speech detection. Select one:\nA) Speech\nB) Non-speech",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "ab_08",
+      "text": "Is human speech the dominant content?\nA) Yes, speech dominates\nB) No, other content dominates (music, tones, noise, silence)",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "ab_09",
+      "text": "Classify audio based on human vocal tract activity:\nA) Vocal tract activity detected (formants, syllabic rhythm)\nB) No vocal tract activity",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "ab_10",
+      "text": "Example: [crowd noise + music] → B\nNow classify the new audio:\nA) Speech\nB) Non-speech",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "ab_11",
+      "text": "Conservative classification (only select A if clearly present):\nA) Human speech clearly audible\nB) No speech OR speech unclear",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "ab_12",
+      "text": "Liberal classification (select A for any hint of speech):\nA) Any hint of human voice (even faint/short)\nB) No human voice at all",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    }
+  ]
+}

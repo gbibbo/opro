@@ -1,0 +1,79 @@
+{
+  "format": "mc",
+  "label_space": ["SPEECH", "NONSPEECH"],
+  "description": "Multiple choice A/B/C/D format prompts. A maps to SPEECH, B/C/D map to NONSPEECH.",
+  "templates": [
+    {
+      "id": "mc_01",
+      "text": "What is in this audio?\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH", "C": "NONSPEECH", "D": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "mc_02",
+      "text": "Classify the dominant audio content:\nA) Human voice/speech\nB) Musical content\nC) Environmental noise\nD) Tones/beeps/clicks",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH", "C": "NONSPEECH", "D": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "mc_03",
+      "text": "Select the best description:\nA) Spoken words or conversational speech\nB) Instrumental or vocal music\nC) Ambient noise or silence\nD) Electronic tones or signals",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH", "C": "NONSPEECH", "D": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "mc_04",
+      "text": "Audio category:\nA) Human vocal communication\nB) Non-speech audio (music/tones)\nC) Noise or silence\nD) Unidentified sounds",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH", "C": "NONSPEECH", "D": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "mc_05",
+      "text": "What do you hear?\nA) Person talking/speaking\nB) Song or melody\nC) Background noise\nD) Beeps/clicks/other",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH", "C": "NONSPEECH", "D": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "mc_06",
+      "text": "Primary audio source:\nA) Human speech (syllables, words, dialogue)\nB) Music (instrumental or sung)\nC) Natural or artificial noise\nD) Silence or very quiet audio",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH", "C": "NONSPEECH", "D": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "mc_07",
+      "text": "Task: Audio classification. Choose one:\nA) Speech detected\nB) Music detected\nC) Noise detected\nD) Silence detected",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH", "C": "NONSPEECH", "D": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "mc_08",
+      "text": "Based on acoustic features, this audio contains:\nA) Human vocal tract activity (formants, consonants)\nB) Musical tones/harmony\nC) Non-linguistic sounds\nD) Minimal acoustic energy",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH", "C": "NONSPEECH", "D": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "mc_09",
+      "text": "Example: [beeping sound] → D\nClassify this new audio:\nA) Human speech\nB) Music\nC) Noise\nD) Other",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH", "C": "NONSPEECH", "D": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "mc_10",
+      "text": "Select the category that best fits:\nA) Spoken language or vocalizations\nB) Songs, melodies, or instruments\nC) Wind, traffic, or ambient sounds\nD) Electronic signals or silence",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH", "C": "NONSPEECH", "D": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "mc_11",
+      "text": "Conservative: Only choose A if very confident.\nA) Clearly human speech\nB) Possibly music\nC) Possibly noise/silence\nD) Uncertain/other",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH", "C": "NONSPEECH", "D": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    },
+    {
+      "id": "mc_12",
+      "text": "What type of audio is this?\nA) Speech or voice\nB) Musical content\nC) Environmental audio\nD) Synthetic tones or quiet",
+      "mapping": {"A": "SPEECH", "B": "NONSPEECH", "C": "NONSPEECH", "D": "NONSPEECH"},
+      "verbalizers": ["SPEECH", "NONSPEECH"]
+    }
+  ]
+}

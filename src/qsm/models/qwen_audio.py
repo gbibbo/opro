@@ -24,6 +24,8 @@ class PredictionResult:
     confidence: float
     raw_output: str
     latency_ms: float
+    probs: dict = None  # Token probabilities (e.g., {"A": 0.8, "B": 0.2, "p_first_token": 0.8})
+    text: str = None  # Alias for raw_output (for compatibility)
 
 
 class ConstrainedVocabLogitsProcessor(LogitsProcessor):
@@ -172,79 +174,114 @@ class Qwen2AudioClassifier:
                 f"Auto-padding enabled: <{self.pad_target_ms}ms -> {self.pad_target_ms}ms (noise amplitude: {self.pad_noise_amplitude})"
             )
 
-        # Initialize constrained decoding if enabled
+        # Initialize constrained decoding token IDs
         self.logits_processor = None
         self.prefix_allowed_tokens_fn = None
 
+        # Setup token IDs for all letters (A/B/C/D) for constrained decoding
+        self._setup_letter_tokens()
+
         if self.constrained_decoding:
-            # For A/B format: get ALL single-token variants for "A" and "B"
-            # (with/without leading space, newline, etc.)
-            tokenizer = self.processor.tokenizer
+            # Setup default A/B constrained decoding
+            self._configure_constrained_decoding("ab")
 
-            # Helper function to get all single-token variants
-            def get_single_token_variants(char: str):
-                """Get all single-token IDs that decode to variants of the character."""
-                variants = [char, f" {char}", f"\n{char}"]
-                valid_ids = []
-                for variant in variants:
-                    ids = tokenizer.encode(variant, add_special_tokens=False)
-                    if len(ids) == 1:
-                        # Verify it decodes back to something containing the char
-                        decoded = tokenizer.decode([ids[0]])
-                        if char in decoded.upper():
-                            valid_ids.append(ids[0])
-                return list(set(valid_ids))  # Remove duplicates
+    def _setup_letter_tokens(self):
+        """Setup token IDs for letters A, B, C, D and EOS."""
+        tokenizer = self.processor.tokenizer
 
-            # Get all valid token IDs for A and B
-            ids_a = get_single_token_variants("A")
-            ids_b = get_single_token_variants("B")
+        # Helper function to get all single-token variants
+        def get_single_token_variants(char: str):
+            """Get all single-token IDs that decode to variants of the character."""
+            variants = [char, f" {char}", f"\n{char}"]
+            valid_ids = []
+            for variant in variants:
+                ids = tokenizer.encode(variant, add_special_tokens=False)
+                if len(ids) == 1:
+                    # Verify it decodes back to something containing the char
+                    decoded = tokenizer.decode([ids[0]])
+                    if char in decoded.upper():
+                        valid_ids.append(ids[0])
+            return list(set(valid_ids))  # Remove duplicates
 
-            # Keep first ID for display
-            self.id_A = ids_a[0] if ids_a else None
-            self.id_B = ids_b[0] if ids_b else None
+        # Get all valid token IDs for A, B, C, D
+        self.ids_a = get_single_token_variants("A")
+        self.ids_b = get_single_token_variants("B")
+        self.ids_c = get_single_token_variants("C")
+        self.ids_d = get_single_token_variants("D")
 
-            # Get EOS token ID from tokenizer (not hardcoded)
-            self.id_eos = tokenizer.eos_token_id
-            if self.id_eos is None:
-                # Fallback: try to get from model generation config
-                self.id_eos = getattr(self.model.generation_config, "eos_token_id", None)
+        # Keep first ID for display
+        self.id_A = self.ids_a[0] if self.ids_a else None
+        self.id_B = self.ids_b[0] if self.ids_b else None
+        self.id_C = self.ids_c[0] if self.ids_c else None
+        self.id_D = self.ids_d[0] if self.ids_d else None
 
-            # Validate that we have all required IDs
-            if not ids_a or not ids_b:
-                raise ValueError(
-                    f"Could not find single tokens for A/B. " f"A: {ids_a}, B: {ids_b}"
-                )
+        # Get EOS token ID from tokenizer (not hardcoded)
+        self.id_eos = tokenizer.eos_token_id
+        if self.id_eos is None:
+            # Fallback: try to get from model generation config
+            self.id_eos = getattr(self.model.generation_config, "eos_token_id", None)
+
+    def _configure_constrained_decoding(self, mode: str):
+        """
+        Configure constrained decoding for a specific mode.
+
+        Args:
+            mode: Decoding mode ("ab", "mc", "labels", "open", "auto")
+        """
+        tokenizer = self.processor.tokenizer
+
+        if mode == "ab":
+            # A/B binary format
+            if not self.ids_a or not self.ids_b:
+                raise ValueError(f"Could not find single tokens for A/B. A: {self.ids_a}, B: {self.ids_b}")
             if self.id_eos is None:
                 raise ValueError("Could not find EOS token ID")
 
             # Store ALL variants for use in prefix_allowed_tokens_fn (no bias)
-            self.first_step_allowed = ids_a + ids_b
-
-            # Create prefix_allowed_tokens_fn
-            def make_prefix_fn(first_allowed, eos_id):
-                def prefix_fn(batch_id, input_ids):
-                    """Allow only A or B on first step, then only EOS."""
-                    # input_ids includes the prompt; we track generation steps
-                    # by comparing current length to initial length
-                    # This function is called before generating each token
-                    # For max_new_tokens=1, we only need first_allowed
-                    return first_allowed
-
-                return prefix_fn
-
-            # Will be applied during generate() with the actual input length
-            self.prefix_allowed_tokens_fn_maker = make_prefix_fn
+            first_step_allowed = self.ids_a + self.ids_b
 
             # Debug: print token mappings
             print("Constrained decoding enabled (A/B format):")
-            print(
-                f"  Tokens for 'A': {ids_a} -> {[repr(tokenizer.decode([tid])) for tid in ids_a]}"
-            )
-            print(
-                f"  Tokens for 'B': {ids_b} -> {[repr(tokenizer.decode([tid])) for tid in ids_b]}"
-            )
+            print(f"  Tokens for 'A': {self.ids_a} -> {[repr(tokenizer.decode([tid])) for tid in self.ids_a]}")
+            print(f"  Tokens for 'B': {self.ids_b} -> {[repr(tokenizer.decode([tid])) for tid in self.ids_b]}")
             print(f"  EOS token: {self.id_eos}")
-            print(f"  Total allowed on first step: {len(self.first_step_allowed)} tokens")
+            print(f"  Total allowed on first step: {len(first_step_allowed)} tokens")
+
+        elif mode == "mc":
+            # A/B/C/D multiple choice format
+            if not self.ids_a or not self.ids_b or not self.ids_c or not self.ids_d:
+                raise ValueError(f"Could not find single tokens for A/B/C/D")
+            if self.id_eos is None:
+                raise ValueError("Could not find EOS token ID")
+
+            # Store ALL variants
+            first_step_allowed = self.ids_a + self.ids_b + self.ids_c + self.ids_d
+
+            # Debug: print token mappings
+            print("Constrained decoding enabled (MC format):")
+            print(f"  Tokens for 'A': {self.ids_a}")
+            print(f"  Tokens for 'B': {self.ids_b}")
+            print(f"  Tokens for 'C': {self.ids_c}")
+            print(f"  Tokens for 'D': {self.ids_d}")
+            print(f"  EOS token: {self.id_eos}")
+            print(f"  Total allowed on first step: {len(first_step_allowed)} tokens")
+
+        else:
+            # No constrained decoding for "labels" or "open" modes
+            first_step_allowed = None
+            print(f"No constrained decoding for mode: {mode}")
+            return
+
+        # Create prefix_allowed_tokens_fn
+        def make_prefix_fn(first_allowed, eos_id):
+            def prefix_fn(batch_id, input_ids):
+                """Allow only specified tokens on first step."""
+                return first_allowed
+            return prefix_fn
+
+        # Store for use during generate()
+        self.prefix_allowed_tokens_fn_maker = make_prefix_fn
+        self.first_step_allowed = first_step_allowed
 
     def _pad_audio_with_noise(
         self,
@@ -284,15 +321,27 @@ class Qwen2AudioClassifier:
 
         return padded
 
-    def predict(self, audio_path: Path | str) -> PredictionResult:
+    def predict(
+        self,
+        audio_path: Path | str,
+        decoding_mode: str = "auto",
+        return_scores: bool = True
+    ) -> PredictionResult:
         """
         Predict SPEECH or NONSPEECH for an audio file.
 
         Args:
             audio_path: Path to audio file (WAV, MP3, etc.)
+            decoding_mode: Decoding mode ("ab", "mc", "labels", "open", "auto")
+                          - "ab": Constrained to A/B (requires constrained_decoding=True)
+                          - "mc": Constrained to A/B/C/D (requires constrained_decoding=True)
+                          - "labels": Free generation for SPEECH/NONSPEECH
+                          - "open": Free generation
+                          - "auto": Auto-detect from prompt
+            return_scores: Whether to return token probabilities
 
         Returns:
-            PredictionResult with label, confidence, raw output, and latency
+            PredictionResult with label, confidence, raw output, latency, and optionally probs
         """
         audio_path = Path(audio_path)
 
@@ -363,10 +412,30 @@ class Qwen2AudioClassifier:
         #     print(f"[DEBUG] input_features shape: {inputs['input_features'].shape}")
         #     print(f"[DEBUG] input_features mean: {inputs['input_features'].mean():.4f}, std: {inputs['input_features'].std():.4f}")
 
+        # Configure constrained decoding based on mode
+        use_constrained = False
+        if decoding_mode in ["ab", "mc"]:
+            if not self.constrained_decoding:
+                # Temporarily enable constrained decoding for this prediction
+                self._configure_constrained_decoding(decoding_mode)
+                use_constrained = True
+            elif decoding_mode != "ab":  # If already enabled but different mode
+                self._configure_constrained_decoding(decoding_mode)
+                use_constrained = True
+            else:
+                use_constrained = True
+        elif decoding_mode == "auto":
+            # Auto-detect from prompt
+            from ..utils.normalize import detect_format
+            detected = detect_format(self.user_prompt)
+            if detected in ["ab", "mc"]:
+                self._configure_constrained_decoding(detected)
+                use_constrained = True
+
         # Generate response
         with torch.no_grad():
-            # Use single token for A/B format, longer for free-form
-            max_tokens = 1 if self.constrained_decoding else 128
+            # Use single token for constrained formats, longer for free-form
+            max_tokens = 1 if use_constrained else 128
 
             generate_kwargs = {
                 **inputs,
@@ -375,8 +444,13 @@ class Qwen2AudioClassifier:
                 "pad_token_id": self.processor.tokenizer.eos_token_id,  # Prevent warnings
             }
 
+            # Add output_scores to get probabilities
+            if return_scores:
+                generate_kwargs["return_dict_in_generate"] = True
+                generate_kwargs["output_scores"] = True
+
             # Add prefix_allowed_tokens_fn if constrained decoding is enabled
-            if hasattr(self, "prefix_allowed_tokens_fn_maker"):
+            if use_constrained and hasattr(self, "prefix_allowed_tokens_fn_maker"):
                 generate_kwargs["prefix_allowed_tokens_fn"] = self.prefix_allowed_tokens_fn_maker(
                     self.first_step_allowed, self.id_eos
                 )
@@ -386,7 +460,38 @@ class Qwen2AudioClassifier:
         # Decode ONLY the generated tokens (not the input prompt)
         # outputs contains [input_tokens][generated_tokens], we only want the new ones
         input_length = inputs["input_ids"].shape[1]
-        generated_tokens = outputs[:, input_length:]
+
+        # Extract probabilities if requested
+        probs_dict = None
+        if return_scores and hasattr(outputs, "scores"):
+            # outputs.scores is a tuple of tensors, one per generated token
+            # Each tensor has shape (batch_size, vocab_size)
+            # We want the first token's probabilities
+            if len(outputs.scores) > 0:
+                first_token_logits = outputs.scores[0][0]  # (vocab_size,)
+                first_token_probs = torch.softmax(first_token_logits, dim=-1)
+
+                probs_dict = {}
+
+                # Extract probabilities for A/B/C/D if using constrained decoding
+                if use_constrained:
+                    if hasattr(self, "ids_a") and self.ids_a:
+                        probs_dict["A"] = first_token_probs[self.ids_a[0]].item()
+                    if hasattr(self, "ids_b") and self.ids_b:
+                        probs_dict["B"] = first_token_probs[self.ids_b[0]].item()
+                    if decoding_mode == "mc":
+                        if hasattr(self, "ids_c") and self.ids_c:
+                            probs_dict["C"] = first_token_probs[self.ids_c[0]].item()
+                        if hasattr(self, "ids_d") and self.ids_d:
+                            probs_dict["D"] = first_token_probs[self.ids_d[0]].item()
+
+                # Get the actual generated token ID and its probability
+                generated_token_id = outputs.sequences[0, input_length].item()
+                probs_dict["p_first_token"] = first_token_probs[generated_token_id].item()
+
+            generated_tokens = outputs.sequences[:, input_length:]
+        else:
+            generated_tokens = outputs[:, input_length:]
 
         output_text = self.processor.batch_decode(
             generated_tokens, skip_special_tokens=True, clean_up_tokenization_spaces=False
@@ -403,6 +508,8 @@ class Qwen2AudioClassifier:
             confidence=confidence,
             raw_output=output_text,
             latency_ms=latency_ms,
+            probs=probs_dict,
+            text=output_text,  # Alias for compatibility
         )
 
     def _parse_response(self, text: str) -> tuple[str, float]:

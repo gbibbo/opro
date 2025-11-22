@@ -22,16 +22,34 @@ import pandas as pd
 from pathlib import Path
 from tqdm import tqdm
 from datetime import datetime
+import sys
+
+# Add src to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from src.qsm.utils.normalize import normalize_to_binary, detect_format
 
 
-def evaluate_sample_with_model(model, audio_path, ground_truth):
+def evaluate_sample_with_model(model, audio_path, ground_truth, decoding_mode="auto", mapping=None, verbalizers=None):
     """
     Evaluate a single sample using Qwen2AudioClassifier.
 
+    Args:
+        model: Qwen2AudioClassifier instance
+        audio_path: Path to audio file
+        ground_truth: Ground truth label (SPEECH/NONSPEECH)
+        decoding_mode: Decoding mode (ab/mc/labels/open/auto)
+        mapping: Optional letter-to-label mapping dict
+        verbalizers: Optional list of valid label strings
+
     Returns:
-        correct: bool (whether prediction matches ground truth)
+        dict: {
+            'correct': bool,
+            'raw_text': str,
+            'normalized_label': str,
+            'p_first_token': float,
+            'probs': dict
+        }
     """
-    import os
     from pathlib import Path
 
     # Hardening: resolve paths robustly
@@ -42,61 +60,131 @@ def evaluate_sample_with_model(model, audio_path, ground_truth):
 
     if not audio_path.exists():
         print(f"  ERROR: File not found: {audio_path}")
-        return False
+        return {
+            'correct': False,
+            'raw_text': 'ERROR',
+            'normalized_label': None,
+            'p_first_token': 0.0,
+            'probs': {}
+        }
 
     try:
-        result = model.predict(str(audio_path.resolve()))
+        # Get prediction with scores
+        result = model.predict(str(audio_path.resolve()), decoding_mode=decoding_mode, return_scores=True)
 
-        # Robust parsing: extract SPEECH/NONSPEECH from any format
-        pred = str(result.label).strip().upper()
+        # Use robust normalization
+        normalized_label, confidence = normalize_to_binary(
+            result.raw_output,
+            probs=result.probs,
+            mode=decoding_mode,
+            mapping=mapping,
+            verbalizers=verbalizers
+        )
 
-        # Normalize: handle A/B, JSON, or direct labels
-        if "SPEECH" in pred and "NONSPEECH" not in pred:
-            pred = "SPEECH"
-        elif "NONSPEECH" in pred or "NON-SPEECH" in pred or "NO SPEECH" in pred:
-            pred = "NONSPEECH"
-        elif pred in ["A", "YES", "TRUE"]:
-            pred = "SPEECH"
-        elif pred in ["B", "NO", "FALSE"]:
-            pred = "NONSPEECH"
+        # Fallback to model's label if normalization failed
+        if normalized_label is None:
+            normalized_label = result.label
 
-        return pred == ground_truth
+        is_correct = (normalized_label == ground_truth) if normalized_label else False
+
+        return {
+            'correct': is_correct,
+            'raw_text': result.raw_output,
+            'normalized_label': normalized_label,
+            'p_first_token': result.probs.get('p_first_token', 0.0) if result.probs else 0.0,
+            'probs': result.probs or {}
+        }
     except Exception as e:
         print(f"  Error processing {audio_path}: {e}")
-        return False
+        return {
+            'correct': False,
+            'raw_text': f'ERROR: {e}',
+            'normalized_label': None,
+            'p_first_token': 0.0,
+            'probs': {}
+        }
 
 
-def evaluate_prompt_on_samples(model, samples, prompt):
+def evaluate_prompt_on_samples(model, samples, prompt_data, decoding_mode="auto"):
     """
     Evaluate a prompt on a set of samples.
 
     Args:
         model: Qwen2AudioClassifier instance
         samples: List of {audio_path, ground_truth} dicts
-        prompt: User prompt string to test
+        prompt_data: Either a string (prompt text) or dict with 'text', 'mapping', 'verbalizers'
+        decoding_mode: Decoding mode (ab/mc/labels/open/auto)
 
     Returns:
-        accuracy: float
+        tuple: (accuracy: float, detailed_results: list)
     """
+    # Handle both string prompts and template dicts
+    if isinstance(prompt_data, str):
+        prompt_text = prompt_data
+        mapping = None
+        verbalizers = ["SPEECH", "NONSPEECH"]
+    else:
+        prompt_text = prompt_data.get('text', prompt_data)
+        mapping = prompt_data.get('mapping', None)
+        verbalizers = prompt_data.get('verbalizers', ["SPEECH", "NONSPEECH"])
+
     # Update model's prompt
-    model.user_prompt = prompt
+    model.user_prompt = prompt_text
 
     correct = 0
     total = len(samples)
-    errors = []
+    detailed_results = []
 
     for sample in tqdm(samples, desc="  Evaluating", leave=False):
-        is_correct = evaluate_sample_with_model(
+        result = evaluate_sample_with_model(
             model,
             sample['audio_path'],
-            sample['ground_truth']
+            sample['ground_truth'],
+            decoding_mode=decoding_mode,
+            mapping=mapping,
+            verbalizers=verbalizers
         )
 
-        if is_correct:
+        if result['correct']:
             correct += 1
 
+        # Collect detailed info
+        detailed_results.append({
+            'audio_path': sample['audio_path'],
+            'ground_truth': sample['ground_truth'],
+            'raw_text': result['raw_text'],
+            'normalized_label': result['normalized_label'],
+            'is_correct': result['correct'],
+            'p_first_token': result['p_first_token'],
+            **result['probs']  # Unpack A/B/C/D probabilities if available
+        })
+
     accuracy = correct / total if total > 0 else 0.0
-    return accuracy
+    return accuracy, detailed_results
+
+
+def load_templates(templates_file):
+    """
+    Load prompt templates from JSON file.
+
+    Args:
+        templates_file: Path to JSON file with template data
+
+    Returns:
+        tuple: (templates_list, format_type, label_space)
+    """
+    with open(templates_file, 'r') as f:
+        data = json.load(f)
+
+    templates = data.get('templates', [])
+    format_type = data.get('format', 'auto')
+    label_space = data.get('label_space', ['SPEECH', 'NONSPEECH'])
+
+    print(f"Loaded {len(templates)} templates from {templates_file}")
+    print(f"  Format: {format_type}")
+    print(f"  Label space: {label_space}")
+
+    return templates, format_type, label_space
 
 
 def generate_candidate_prompts(prompt_history, num_candidates=12):
@@ -193,7 +281,8 @@ def stratified_sample_df(df, n, seed=42):
     return pd.concat([a, b]).sample(frac=1, random_state=seed)
 
 
-def opro_optimize(model, train_df, num_iterations=15, samples_per_iter=20, num_candidates=8, seed=42):
+def opro_optimize(model, train_df, num_iterations=15, samples_per_iter=20, num_candidates=8, seed=42,
+                  templates=None, decoding_mode="auto", output_dir=None, per_prompt_dump=False):
     """
     OPRO optimization loop using generation-based evaluation.
 
@@ -204,6 +293,10 @@ def opro_optimize(model, train_df, num_iterations=15, samples_per_iter=20, num_c
         samples_per_iter: Number of samples to evaluate per iteration
         num_candidates: Number of candidate prompts per iteration
         seed: Random seed for reproducibility
+        templates: Optional list of template dicts from JSON file
+        decoding_mode: Decoding mode (ab/mc/labels/open/auto)
+        output_dir: Optional output directory for saving detailed CSVs
+        per_prompt_dump: Whether to save detailed CSV for each prompt
 
     Returns:
         best_prompt, best_accuracy, history
@@ -244,29 +337,73 @@ def opro_optimize(model, train_df, num_iterations=15, samples_per_iter=20, num_c
         iter_samples = iter_samples_df[['audio_path', 'ground_truth']].to_dict('records')
 
         # Generate candidate prompts
-        candidates = generate_candidate_prompts(prompt_history, num_candidates)
+        if templates:
+            # Use templates from JSON file
+            if iteration == 0:
+                # First iteration: use all templates up to num_candidates
+                candidates = templates[:num_candidates]
+            else:
+                # Subsequent iterations: best so far + random templates
+                best_template, best_acc = max(prompt_history, key=lambda x: x[1])
+                candidates = [best_template]
+                remaining = [t for t in templates if t != best_template]
+                random.shuffle(remaining)
+                candidates.extend(remaining[:num_candidates-1])
+        else:
+            # Fallback to hardcoded templates
+            candidates = generate_candidate_prompts(prompt_history, num_candidates)
 
         print(f"\nEvaluating {len(candidates)} candidate prompts...")
 
         # Evaluate each candidate
         candidate_results = []
-        for i, prompt in enumerate(candidates):
-            print(f"\n[{i+1}/{len(candidates)}] Testing prompt:")
-            print(f"  {prompt[:80]}...")
+        all_detailed_results = []  # Collect all detailed results for this iteration
 
-            accuracy = evaluate_prompt_on_samples(model, iter_samples, prompt)
+        for i, prompt_data in enumerate(candidates):
+            # Extract prompt text for display
+            if isinstance(prompt_data, dict):
+                prompt_text = prompt_data.get('text', str(prompt_data))
+                prompt_id = prompt_data.get('id', f'prompt_{i:02d}')
+            else:
+                prompt_text = prompt_data
+                prompt_id = f'prompt_{i:02d}'
 
-            candidate_results.append((prompt, accuracy))
+            print(f"\n[{i+1}/{len(candidates)}] Testing prompt ({prompt_id}):")
+            print(f"  {prompt_text[:80]}...")
+
+            accuracy, detailed_results = evaluate_prompt_on_samples(
+                model, iter_samples, prompt_data, decoding_mode=decoding_mode
+            )
+
+            # Add metadata to detailed results
+            for result in detailed_results:
+                result['prompt_id'] = prompt_id
+                result['iteration'] = iteration + 1
+                result['decoding_mode'] = decoding_mode
+            all_detailed_results.extend(detailed_results)
+
+            candidate_results.append((prompt_data, accuracy))
             print(f"  Accuracy: {accuracy:.1%}")
 
+            # Save per-prompt CSV if requested
+            if per_prompt_dump and output_dir:
+                prompt_csv = output_dir / f"iter{iteration+1:02d}_{prompt_id}_predictions.csv"
+                pd.DataFrame(detailed_results).to_csv(prompt_csv, index=False)
+
             # Update history
-            prompt_history.append((prompt, accuracy))
+            prompt_history.append((prompt_data, accuracy))
 
             # Update best
             if accuracy > best_accuracy:
                 best_accuracy = accuracy
-                best_prompt = prompt
+                best_prompt = prompt_data
                 print(f"  ✓ New best! {best_accuracy:.1%}")
+
+        # Save aggregated CSV for this iteration
+        if output_dir and all_detailed_results:
+            iter_csv = output_dir / f"iter{iteration+1:02d}_all_predictions.csv"
+            pd.DataFrame(all_detailed_results).to_csv(iter_csv, index=False)
+            print(f"\nIteration results saved to: {iter_csv}")
 
         # Summary
         best_this_iter = max(candidate_results, key=lambda x: x[1])
@@ -295,6 +432,13 @@ def main():
                         help='Number of candidate prompts per iteration')
     parser.add_argument('--seed', type=int, default=42,
                         help='Random seed')
+    parser.add_argument('--templates_file', type=str, default=None,
+                        help='Path to JSON file with prompt templates (e.g., prompts/ab.json)')
+    parser.add_argument('--decoding', type=str, default='auto',
+                        choices=['auto', 'ab', 'mc', 'labels', 'open'],
+                        help='Decoding mode: auto (detect from prompt), ab (A/B), mc (A/B/C/D), labels (SPEECH/NONSPEECH), open (free-form)')
+    parser.add_argument('--per_prompt_dump', action='store_true',
+                        help='Save detailed CSV for each prompt (for debugging)')
 
     args = parser.parse_args()
 
@@ -340,13 +484,26 @@ def main():
     print(f"  SPEECH:    {(train_df['ground_truth'] == 'SPEECH').sum()}")
     print(f"  NONSPEECH: {(train_df['ground_truth'] == 'NONSPEECH').sum()}")
 
+    # Load templates if provided
+    templates = None
+    format_type = args.decoding
+    if args.templates_file:
+        templates, detected_format, label_space = load_templates(args.templates_file)
+        if args.decoding == 'auto':
+            format_type = detected_format
+        print(f"\nUsing decoding mode: {format_type}")
+
     # Run OPRO
     best_prompt, best_accuracy, history = opro_optimize(
         model, train_df,
         num_iterations=args.num_iterations,
         samples_per_iter=args.samples_per_iter,
         num_candidates=args.num_candidates,
-        seed=args.seed
+        seed=args.seed,
+        templates=templates,
+        decoding_mode=format_type,
+        output_dir=output_dir,
+        per_prompt_dump=args.per_prompt_dump
     )
 
     # Save results
