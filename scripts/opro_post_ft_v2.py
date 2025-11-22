@@ -87,42 +87,65 @@ def evaluate_prompt_on_samples(model, samples, prompt):
     return accuracy
 
 
-def generate_candidate_prompts(prompt_history, num_candidates=8):
+def generate_candidate_prompts(prompt_history, num_candidates=12):
     """
-    Generate candidate prompts using templates.
+    Generate candidate prompts using best-practice templates.
 
-    All templates use 4-option format: A=Speech, B=Music, C=Noise/silence, D=Other
+    Based on prompt engineering research:
+    - Structured output (A/B format or direct labels)
+    - Label descriptions (verbalizers)
+    - Constrained output space
+    - Few-shot examples
+    - Calibration-friendly formats
     """
     templates = [
-        # Baseline (from prompts/prompt_base.txt)
+        # BASELINE: Original 4-option format
         "What is in this audio?\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
 
-        # Explicit instruction
-        "Listen carefully and select one option:\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
+        # 1) Minimal closed option (A/B)
+        "Task: Binary audio classification.\nQuestion: Does this audio contain **human speech**?\nOptions:\nA) SPEECH\nB) NONSPEECH\nAnswer with A or B only.",
 
-        # Question format
-        "What type of audio is this?\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
+        # 2) Direct label (forced single token)
+        "Does this audio contain human speech?\nAnswer with exactly one token: SPEECH or NONSPEECH.",
 
-        # Classify format
-        "Classify this audio content:\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
+        # 3) Label descriptions (verbalizers)
+        "Decide the dominant content.\nDefinitions:\n- SPEECH = human voice, spoken words, syllables, conversational cues.\n- NONSPEECH = music, tones/beeps, environmental noise, silence.\nOutput exactly: SPEECH or NONSPEECH.",
 
-        # Task framing
-        "Identify the audio content. Choose one:\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
+        # 4) Contrastive/counter-examples
+        "Detect human speech. Treat the following as NONSPEECH: pure tones/beeps, clicks, clock ticks, music, environmental noise, silence.\nAnswer: SPEECH or NONSPEECH.",
 
-        # Detailed descriptions
-        "What is in this audio?\nA) Human speech (talking, speaking, vocalizations)\nB) Music (instruments, singing)\nC) Noise or silence (background noise, quiet)\nD) Other sounds (animals, environment)",
+        # 5) JSON format (structured output)
+        'Decide if human speech is present.\nReturn JSON only: {"label":"SPEECH|NONSPEECH","confidence":"high|low"}',
 
-        # Simple/direct
-        "Select one:\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
+        # 6) 1-shot consistency
+        "Example:\nAudio→ crowd noise, music → Output: NONSPEECH\nNow classify the new audio. Output exactly ONE token: SPEECH or NONSPEECH.",
 
-        # Instruction style
-        "Audio classification:\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds\n\nYour answer:",
+        # 7) Forced decision (avoid uncertainty)
+        "Make a definite decision for the clip.\nOutput exactly one token: SPEECH or NONSPEECH.",
 
-        # Emphatic
-        "Listen to this audio. What do you hear?\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
+        # 8) Conservative (reduce false positives)
+        "Label SPEECH only if human voice is clearly present; otherwise label NONSPEECH.\nAnswer: SPEECH or NONSPEECH.",
 
-        # Analysis framing
-        "Analyze this audio and categorize it:\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
+        # 9) Liberal (reduce false negatives)
+        "If there is any hint of human voice (even faint/short), label SPEECH; otherwise NONSPEECH.\nAnswer: SPEECH or NONSPEECH.",
+
+        # 10) Acoustic focus (vocal tract features)
+        "Focus on cues of human vocal tract (formants, syllabic rhythm, consonant onsets).\nAnswer exactly: SPEECH or NONSPEECH.",
+
+        # 11) Multiple-choice with definitions (A/B)
+        "Choose one:\nA) SPEECH — human voice present\nB) NONSPEECH — music/noise/silence/other\nAnswer with A or B only.",
+
+        # 12) Delimiters + short output
+        "You will answer with one token only.\n<question>Does this audio contain human speech?</question>\n<answer>SPEECH or NONSPEECH only</answer>",
+
+        # 13) Task-oriented (explicit task framing)
+        "TASK: Speech detection.\nIs human voice/speech present in this audio?\nA) YES (SPEECH)\nB) NO (NONSPEECH)\nAnswer A or B.",
+
+        # 14) Confidence calibration format
+        "Binary classification task.\nQ: Does this contain human speech?\nIf confident YES → SPEECH\nIf confident NO → NONSPEECH\nAnswer:",
+
+        # 15) Minimal 4-option (keep for comparison)
+        "Select:\nA) Human speech\nB) Music\nC) Noise/silence\nD) Other sounds",
     ]
 
     # If we have history, include best performing prompt

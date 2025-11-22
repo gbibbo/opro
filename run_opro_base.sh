@@ -37,11 +37,11 @@ apptainer exec --nv \
   "$CONTAINER" python3 scripts/opro_post_ft_v2.py \
   --no_lora \
   --train_csv data/processed/experimental_variants/dev_metadata.csv \
-  --output_dir results/opro_base \
-  --num_iterations 15 \
-  --samples_per_iter 20 \
-  --num_candidates 6 \
+  --output_dir results/opro_base_v2 \
+  --num_iterations 10 \
+  --samples_per_iter 100 \
+  --num_candidates 12 \
   --seed 42
 
 echo "[DONE] End: $(date)"
-echo "Results: results/opro_base/"
+echo "Results: results/opro_base_v2/"
