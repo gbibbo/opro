@@ -6,17 +6,16 @@ Normalizes model outputs from different prompt formats (A/B, MC, labels, open)
 to binary SPEECH/NONSPEECH labels with confidence scores.
 """
 
-from typing import Optional, Dict, List, Tuple
 import re
 
 
 def normalize_to_binary(
     text: str,
-    probs: Optional[Dict[str, float]] = None,
+    probs: dict[str, float] | None = None,
     mode: str = "auto",
-    mapping: Optional[Dict[str, str]] = None,
-    verbalizers: Optional[List[str]] = None
-) -> Tuple[Optional[str], float]:
+    mapping: dict[str, str] | None = None,
+    verbalizers: list[str] | None = None
+) -> tuple[str | None, float]:
     """
     Normalize model output to binary SPEECH/NONSPEECH label.
 
@@ -165,7 +164,7 @@ def detect_format(text: str) -> str:
     return "open"
 
 
-def validate_mapping(mapping: Dict[str, str], label_space: List[str]) -> bool:
+def validate_mapping(mapping: dict[str, str], label_space: list[str]) -> bool:
     """
     Validate that mapping dict maps to valid labels.
 

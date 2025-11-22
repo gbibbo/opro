@@ -250,7 +250,7 @@ class Qwen2AudioClassifier:
         elif mode == "mc":
             # A/B/C/D multiple choice format
             if not self.ids_a or not self.ids_b or not self.ids_c or not self.ids_d:
-                raise ValueError(f"Could not find single tokens for A/B/C/D")
+                raise ValueError("Could not find single tokens for A/B/C/D")
             if self.id_eos is None:
                 raise ValueError("Could not find EOS token ID")
 
