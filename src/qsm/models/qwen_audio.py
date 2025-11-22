@@ -233,7 +233,9 @@ class Qwen2AudioClassifier:
         if mode == "ab":
             # A/B binary format
             if not self.ids_a or not self.ids_b:
-                raise ValueError(f"Could not find single tokens for A/B. A: {self.ids_a}, B: {self.ids_b}")
+                raise ValueError(
+                    f"Could not find single tokens for A/B. A: {self.ids_a}, B: {self.ids_b}"
+                )
             if self.id_eos is None:
                 raise ValueError("Could not find EOS token ID")
 
@@ -242,8 +244,12 @@ class Qwen2AudioClassifier:
 
             # Debug: print token mappings
             print("Constrained decoding enabled (A/B format):")
-            print(f"  Tokens for 'A': {self.ids_a} -> {[repr(tokenizer.decode([tid])) for tid in self.ids_a]}")
-            print(f"  Tokens for 'B': {self.ids_b} -> {[repr(tokenizer.decode([tid])) for tid in self.ids_b]}")
+            print(
+                f"  Tokens for 'A': {self.ids_a} -> {[repr(tokenizer.decode([tid])) for tid in self.ids_a]}"
+            )
+            print(
+                f"  Tokens for 'B': {self.ids_b} -> {[repr(tokenizer.decode([tid])) for tid in self.ids_b]}"
+            )
             print(f"  EOS token: {self.id_eos}")
             print(f"  Total allowed on first step: {len(first_step_allowed)} tokens")
 
@@ -277,6 +283,7 @@ class Qwen2AudioClassifier:
             def prefix_fn(batch_id, input_ids):
                 """Allow only specified tokens on first step."""
                 return first_allowed
+
             return prefix_fn
 
         # Store for use during generate()
@@ -322,10 +329,7 @@ class Qwen2AudioClassifier:
         return padded
 
     def predict(
-        self,
-        audio_path: Path | str,
-        decoding_mode: str = "auto",
-        return_scores: bool = True
+        self, audio_path: Path | str, decoding_mode: str = "auto", return_scores: bool = True
     ) -> PredictionResult:
         """
         Predict SPEECH or NONSPEECH for an audio file.
@@ -427,6 +431,7 @@ class Qwen2AudioClassifier:
         elif decoding_mode == "auto":
             # Auto-detect from prompt
             from ..utils.normalize import detect_format
+
             detected = detect_format(self.user_prompt)
             if detected in ["ab", "mc"]:
                 self._configure_constrained_decoding(detected)

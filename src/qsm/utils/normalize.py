@@ -14,7 +14,7 @@ def normalize_to_binary(
     probs: dict[str, float] | None = None,
     mode: str = "auto",
     mapping: dict[str, str] | None = None,
-    verbalizers: list[str] | None = None
+    verbalizers: list[str] | None = None,
 ) -> tuple[str | None, float]:
     """
     Normalize model output to binary SPEECH/NONSPEECH label.
@@ -77,13 +77,17 @@ def normalize_to_binary(
             # Semantic label wins over letter
             if verb.upper() == "SPEECH":
                 return "SPEECH", confidence
-            elif verb.upper() == "NONSPEECH" or "NON-SPEECH" in text_clean or "NO SPEECH" in text_clean:
+            elif (
+                verb.upper() == "NONSPEECH"
+                or "NON-SPEECH" in text_clean
+                or "NO SPEECH" in text_clean
+            ):
                 return "NONSPEECH", confidence
 
     # Priority 2: Letter mapping (A/B/C/D)
     if mapping:
         # Extract first letter from response
-        letter_match = re.match(r'^([A-D])', text_clean)
+        letter_match = re.match(r"^([A-D])", text_clean)
         if letter_match:
             letter = letter_match.group(1)
             if letter in mapping:
@@ -107,19 +111,56 @@ def normalize_to_binary(
 
     # Priority 4: Synonyms and semantic content
     speech_synonyms = [
-        "voice", "voices", "talking", "spoken", "speaking", "speaker",
-        "conversation", "conversational", "words", "utterance", "vocal",
-        "human voice", "person talking", "dialogue", "speech",
-        "syllables", "phonemes", "formants"
+        "voice",
+        "voices",
+        "talking",
+        "spoken",
+        "speaking",
+        "speaker",
+        "conversation",
+        "conversational",
+        "words",
+        "utterance",
+        "vocal",
+        "human voice",
+        "person talking",
+        "dialogue",
+        "speech",
+        "syllables",
+        "phonemes",
+        "formants",
     ]
 
     nonspeech_synonyms = [
-        "music", "musical", "song", "melody", "instrumental",
-        "beep", "beeps", "tone", "tones", "pitch", "sine wave",
-        "noise", "noisy", "static", "hiss", "white noise",
-        "silence", "silent", "quiet", "nothing", "empty",
-        "ambient", "environmental", "background",
-        "click", "clicks", "clock", "tick", "ticking"
+        "music",
+        "musical",
+        "song",
+        "melody",
+        "instrumental",
+        "beep",
+        "beeps",
+        "tone",
+        "tones",
+        "pitch",
+        "sine wave",
+        "noise",
+        "noisy",
+        "static",
+        "hiss",
+        "white noise",
+        "silence",
+        "silent",
+        "quiet",
+        "nothing",
+        "empty",
+        "ambient",
+        "environmental",
+        "background",
+        "click",
+        "clicks",
+        "clock",
+        "tick",
+        "ticking",
     ]
 
     # Count matches
@@ -152,8 +193,9 @@ def detect_format(text: str) -> str:
         return "mc"
 
     # Check for A/B binary
-    if ("A)" in text_upper and "B)" in text_upper) or \
-       ("OPTION A" in text_upper and "OPTION B" in text_upper):
+    if ("A)" in text_upper and "B)" in text_upper) or (
+        "OPTION A" in text_upper and "OPTION B" in text_upper
+    ):
         return "ab"
 
     # Check for explicit labels
