@@ -38,7 +38,6 @@ import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -50,7 +49,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.qsm.models.qwen_audio import Qwen2AudioClassifier
 from src.qsm.utils.normalize import normalize_to_binary
-
 
 # ============================================================================
 # Data Classes
@@ -182,7 +180,7 @@ class LocalLLMGenerator:
 # ============================================================================
 
 
-def sanitize_prompt(prompt: str) -> Tuple[str, bool]:
+def sanitize_prompt(prompt: str) -> tuple[str, bool]:
     """
     Sanitize and validate prompt candidate.
 
@@ -191,9 +189,13 @@ def sanitize_prompt(prompt: str) -> Tuple[str, bool]:
     """
     # Remove any audio special tokens
     forbidden_tokens = [
-        '<|audio_bos|>', '<|AUDIO|>', '<|audio_eos|>',
-        '<|im_start|>', '<|im_end|>',
-        '<audio>', '</audio>',
+        "<|audio_bos|>",
+        "<|AUDIO|>",
+        "<|audio_eos|>",
+        "<|im_start|>",
+        "<|im_end|>",
+        "<audio>",
+        "</audio>",
     ]
 
     cleaned = prompt.strip()
@@ -214,13 +216,13 @@ def sanitize_prompt(prompt: str) -> Tuple[str, bool]:
 
     # Must contain SPEECH and NON-SPEECH keywords
     upper = cleaned.upper()
-    if 'SPEECH' not in upper or 'NON-SPEECH' not in upper:
-        if 'SPEECH' not in upper and 'NONSPEECH' not in upper:
-            print(f"      ⚠️  Rejected: Missing SPEECH/NON-SPEECH keywords")
+    if "SPEECH" not in upper or "NON-SPEECH" not in upper:
+        if "SPEECH" not in upper and "NONSPEECH" not in upper:
+            print("      ⚠️  Rejected: Missing SPEECH/NON-SPEECH keywords")
             return cleaned, False
 
     # Remove multiple spaces and newlines
-    cleaned = re.sub(r'\s+', ' ', cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
     cleaned = cleaned.strip()
 
     return cleaned, True
@@ -249,7 +251,7 @@ class OPROClassicOptimizer:
         reward_weights: dict = None,
         seed: int = 42,
         baseline_prompt: str = None,
-        initial_prompts: List[str] = None,
+        initial_prompts: list[str] = None,
         max_new_tokens: int = 2000,
         temperature: float = 0.7,
     ):
@@ -293,8 +295,8 @@ class OPROClassicOptimizer:
         )
 
         # Top-k memory
-        self.memory: List[PromptCandidate] = []
-        self.history: List[PromptCandidate] = []
+        self.memory: list[PromptCandidate] = []
+        self.history: list[PromptCandidate] = []
 
         # Baseline prompt
         if baseline_prompt is None:
@@ -308,7 +310,7 @@ class OPROClassicOptimizer:
         # Initial prompts (if provided)
         self.initial_prompts = initial_prompts or []
 
-        print(f"\nOPRO Classic Optimizer initialized:")
+        print("\nOPRO Classic Optimizer initialized:")
         print(f"  LLM: {optimizer_llm}")
         print(f"  Device: {device}")
         print(f"  Top-k: {top_k}")
@@ -332,7 +334,9 @@ class OPROClassicOptimizer:
         history_str = ""
         for i, candidate in enumerate(sorted_memory[: self.top_k], 1):
             # Show only clean text (no special tokens)
-            clean_prompt = candidate.prompt.replace('<|audio_bos|><|AUDIO|><|audio_eos|>', '').strip()
+            clean_prompt = candidate.prompt.replace(
+                "<|audio_bos|><|AUDIO|><|audio_eos|>", ""
+            ).strip()
             history_str += f"\n{i}. Reward={candidate.reward:.4f} | BA_clip={candidate.ba_clip:.3f} | BA_cond={candidate.ba_conditions:.3f}\n"
             history_str += f'   "{clean_prompt}"\n'
 
@@ -385,7 +389,7 @@ Generate the prompts now:"""
 
         return meta_prompt
 
-    def generate_candidates(self, iteration: int) -> List[str]:
+    def generate_candidates(self, iteration: int) -> list[str]:
         """Use local LLM to generate new prompt candidates."""
         meta_prompt = self.build_meta_prompt(iteration)
 
@@ -405,7 +409,7 @@ Generate the prompts now:"""
 
         return candidates
 
-    def _parse_and_sanitize_candidates(self, llm_output: str) -> List[str]:
+    def _parse_and_sanitize_candidates(self, llm_output: str) -> list[str]:
         """Parse candidates from LLM output and sanitize them."""
         candidates_raw = []
         lines = llm_output.strip().split("\n")
@@ -437,29 +441,31 @@ Generate the prompts now:"""
 
             if is_valid:
                 candidates_clean.append(cleaned)
-                print(f"      ✓ Valid")
+                print("      ✓ Valid")
 
             if len(candidates_clean) >= self.candidates_per_iter:
                 break
 
         # Fallback if no valid candidates generated
         if len(candidates_clean) == 0:
-            print(f"\n  ⚠️  WARNING: No valid candidates generated!")
-            print(f"  Falling back to baseline variations...")
+            print("\n  ⚠️  WARNING: No valid candidates generated!")
+            print("  Falling back to baseline variations...")
             candidates_clean = [
                 "Does this audio contain human speech? Answer: SPEECH or NON-SPEECH.",
                 "Is there speech in this audio? Reply: SPEECH or NON-SPEECH.",
                 "Audio classification: SPEECH or NON-SPEECH?",
-            ][:self.candidates_per_iter]
+            ][: self.candidates_per_iter]
 
-        return candidates_clean[:self.candidates_per_iter]
+        return candidates_clean[: self.candidates_per_iter]
 
     def update_memory(self, candidate: PromptCandidate):
         """Add candidate to memory and history."""
         self.history.append(candidate)
         self.memory.append(candidate)
         self.memory = sorted(self.memory, key=lambda x: x.reward, reverse=True)[: self.top_k]
-        print(f"Memory updated: {len(self.memory)} prompts, best reward={self.memory[0].reward:.4f}")
+        print(
+            f"Memory updated: {len(self.memory)} prompts, best reward={self.memory[0].reward:.4f}"
+        )
 
     def save_state(self, output_dir: Path):
         """Save optimizer state."""
@@ -588,11 +594,13 @@ Generate the prompts now:"""
                     )
 
                     self.update_memory(candidate)
-                    print(f"Results: BA_clip={ba_clip:.3f}, BA_cond={ba_cond:.3f}, Reward={reward:.4f}")
+                    print(
+                        f"Results: BA_clip={ba_clip:.3f}, BA_cond={ba_cond:.3f}, Reward={reward:.4f}"
+                    )
 
                 except Exception as e:
                     print(f"  ✗ ERROR evaluating candidate: {e}")
-                    print(f"  Skipping this candidate...")
+                    print("  Skipping this candidate...")
                     continue
 
             # Check for improvement
@@ -604,7 +612,9 @@ Generate the prompts now:"""
                 no_improvement_count = 0
             else:
                 no_improvement_count += 1
-                print(f"\nNo improvement (patience: {no_improvement_count}/{early_stopping_patience})")
+                print(
+                    f"\nNo improvement (patience: {no_improvement_count}/{early_stopping_patience})"
+                )
 
             # Save state
             if output_dir:
@@ -635,7 +645,7 @@ def build_evaluator_from_args(args) -> Qwen2AudioClassifier:
     """Build evaluator model from command-line arguments."""
     print(f"\nLoading evaluator model: {args.evaluator_model_name}...")
     print(f"  Device: {args.evaluator_device}")
-    print(f"  4-bit quantization: True")
+    print("  4-bit quantization: True")
 
     model = Qwen2AudioClassifier(
         model_name=args.evaluator_model_name,
@@ -646,6 +656,7 @@ def build_evaluator_from_args(args) -> Qwen2AudioClassifier:
     if not args.no_lora and args.checkpoint is not None:
         print(f"  Loading LoRA checkpoint: {args.checkpoint}")
         from peft import PeftModel
+
         model.model = PeftModel.from_pretrained(model.model, args.checkpoint)
         model.model.eval()
         print("  LoRA checkpoint loaded!")
@@ -668,12 +679,12 @@ def make_evaluator_fn(args, evaluator_model):
     manifest_df = pd.read_parquet(args.manifest)
     split_df = manifest_df[manifest_df["split"] == args.split].copy()
 
-    print(f"\nDataset loaded:")
+    print("\nDataset loaded:")
     print(f"  Manifest: {args.manifest}")
     print(f"  Split: {args.split}")
     print(f"  Samples: {len(split_df)}")
 
-    def evaluator_fn(prompt: str) -> Tuple[float, float, dict]:
+    def evaluator_fn(prompt: str) -> tuple[float, float, dict]:
         """
         Evaluate prompt on dataset.
 
@@ -685,9 +696,11 @@ def make_evaluator_fn(args, evaluator_model):
 
         # Evaluate on all samples
         results = []
-        for _, row in tqdm(split_df.iterrows(), total=len(split_df), desc="  Evaluating", leave=False):
-            audio_path = row['audio_path']
-            ground_truth = row['label']
+        for _, row in tqdm(
+            split_df.iterrows(), total=len(split_df), desc="  Evaluating", leave=False
+        ):
+            audio_path = row["audio_path"]
+            ground_truth = row["label"]
 
             # Handle path resolution
             audio_path = Path(audio_path)
@@ -706,7 +719,7 @@ def make_evaluator_fn(args, evaluator_model):
                     result.raw_output,
                     probs=result.probs,
                     mode="auto",
-                    verbalizers=["SPEECH", "NONSPEECH"]
+                    verbalizers=["SPEECH", "NONSPEECH"],
                 )
 
                 if normalized_label is None:
@@ -714,13 +727,34 @@ def make_evaluator_fn(args, evaluator_model):
 
                 is_correct = (normalized_label == ground_truth) if normalized_label else False
 
-                results.append({
-                    'audio_path': str(audio_path),
-                    'ground_truth': ground_truth,
-                    'prediction': normalized_label,
-                    'correct': is_correct,
-                    'condition': row.get('condition', 'unknown'),
-                })
+                # Create condition string from variant_type and corresponding value
+                variant_type = row.get("variant_type", "unknown")
+                if variant_type == "duration":
+                    condition = f"dur_{row.get('duration_ms', 'unk')}ms"
+                elif variant_type == "snr":
+                    condition = f"snr_{row.get('snr_db', 'unk')}dB"
+                elif variant_type == "band":
+                    condition = f"filter_{row.get('band_filter', 'unk')}"
+                elif variant_type == "rir":
+                    condition = f"reverb_T60_{row.get('T60', 'unk')}s"
+                else:
+                    condition = "unknown"
+
+                results.append(
+                    {
+                        "audio_path": str(audio_path),
+                        "ground_truth": ground_truth,
+                        "prediction": normalized_label,
+                        "correct": is_correct,
+                        "condition": condition,
+                        "variant_type": variant_type,
+                        # NUEVO: dimensiones psicoacústicas explícitas
+                        "duration_ms": row.get("duration_ms", None),
+                        "snr_db": row.get("snr_db", None),
+                        "band_filter": row.get("band_filter", None),
+                        "T60": row.get("T60", None),
+                    }
+                )
 
             except Exception as e:
                 print(f"  Error processing {audio_path}: {e}")
@@ -729,47 +763,106 @@ def make_evaluator_fn(args, evaluator_model):
         # Calculate metrics
         results_df = pd.DataFrame(results)
 
-        # Balanced accuracy at clip level
+        # Empty safeguard
         if len(results_df) == 0:
             return 0.0, 0.0, {}
 
-        speech_samples = results_df[results_df['ground_truth'] == 'SPEECH']
-        nonspeech_samples = results_df[results_df['ground_truth'] == 'NONSPEECH']
+        # ------------------------------------------------------------------
+        # 1) Balanced accuracy at clip level
+        # ------------------------------------------------------------------
+        speech_samples = results_df[results_df["ground_truth"] == "SPEECH"]
+        nonspeech_samples = results_df[results_df["ground_truth"] == "NONSPEECH"]
 
-        speech_acc = speech_samples['correct'].mean() if len(speech_samples) > 0 else 0.0
-        nonspeech_acc = nonspeech_samples['correct'].mean() if len(nonspeech_samples) > 0 else 0.0
+        speech_acc = speech_samples["correct"].mean() if len(speech_samples) > 0 else 0.0
+        nonspeech_acc = nonspeech_samples["correct"].mean() if len(nonspeech_samples) > 0 else 0.0
         ba_clip = (speech_acc + nonspeech_acc) / 2.0
 
-        # Balanced accuracy by condition
+        # ------------------------------------------------------------------
+        # 2) Balanced accuracy por condición compuesta (string 'condition')
+        # ------------------------------------------------------------------
         condition_bas = []
         condition_metrics = {}
 
-        for condition in results_df['condition'].unique():
-            cond_df = results_df[results_df['condition'] == condition]
-            cond_speech = cond_df[cond_df['ground_truth'] == 'SPEECH']
-            cond_nonspeech = cond_df[cond_df['ground_truth'] == 'NONSPEECH']
+        for condition in results_df["condition"].unique():
+            cond_df = results_df[results_df["condition"] == condition]
+            cond_speech = cond_df[cond_df["ground_truth"] == "SPEECH"]
+            cond_nonspeech = cond_df[cond_df["ground_truth"] == "NONSPEECH"]
 
-            cond_speech_acc = cond_speech['correct'].mean() if len(cond_speech) > 0 else 0.0
-            cond_nonspeech_acc = cond_nonspeech['correct'].mean() if len(cond_nonspeech) > 0 else 0.0
+            cond_speech_acc = cond_speech["correct"].mean() if len(cond_speech) > 0 else 0.0
+            cond_nonspeech_acc = (
+                cond_nonspeech["correct"].mean() if len(cond_nonspeech) > 0 else 0.0
+            )
             cond_ba = (cond_speech_acc + cond_nonspeech_acc) / 2.0
 
             condition_bas.append(cond_ba)
-            condition_metrics[condition] = {
-                'ba': cond_ba,
-                'speech_acc': cond_speech_acc,
-                'nonspeech_acc': cond_nonspeech_acc,
-                'n_samples': len(cond_df),
+            condition_metrics[str(condition)] = {
+                "ba": float(cond_ba),
+                "speech_acc": float(cond_speech_acc),
+                "nonspeech_acc": float(cond_nonspeech_acc),
+                "n_samples": int(len(cond_df)),
             }
 
-        ba_conditions = np.mean(condition_bas) if len(condition_bas) > 0 else 0.0
+        ba_conditions = float(np.mean(condition_bas)) if len(condition_bas) > 0 else 0.0
 
+        # ------------------------------------------------------------------
+        # 3) Helper para BA por columna (duración, SNR, filtro, reverb)
+        # ------------------------------------------------------------------
+        def compute_ba_by_column(df: pd.DataFrame, col: str):
+            if col not in df.columns:
+                return 0.0, {}
+
+            values = [v for v in df[col].unique() if pd.notna(v)]
+            if not values:
+                return 0.0, {}
+
+            bas = []
+            metrics_by_value = {}
+
+            for v in values:
+                sub = df[df[col] == v]
+                speech = sub[sub["ground_truth"] == "SPEECH"]
+                nonspeech = sub[sub["ground_truth"] == "NONSPEECH"]
+
+                speech_acc_v = speech["correct"].mean() if len(speech) > 0 else 0.0
+                nonspeech_acc_v = nonspeech["correct"].mean() if len(nonspeech) > 0 else 0.0
+                ba_v = (speech_acc_v + nonspeech_acc_v) / 2.0
+
+                bas.append(ba_v)
+                metrics_by_value[str(v)] = {
+                    "ba": float(ba_v),
+                    "speech_acc": float(speech_acc_v),
+                    "nonspeech_acc": float(nonspeech_acc_v),
+                    "n_samples": int(len(sub)),
+                }
+
+            return float(np.mean(bas)), metrics_by_value
+
+        # ------------------------------------------------------------------
+        # 4) BA por dimensión psicoacústica
+        # ------------------------------------------------------------------
+        ba_duration, duration_metrics = compute_ba_by_column(results_df, "duration_ms")
+        ba_snr, snr_metrics = compute_ba_by_column(results_df, "snr_db")
+        ba_filter, filter_metrics = compute_ba_by_column(results_df, "band_filter")
+        ba_reverb, reverb_metrics = compute_ba_by_column(results_df, "T60")
+
+        # ------------------------------------------------------------------
+        # 5) Empaquetar todas las métricas en un dict
+        # ------------------------------------------------------------------
         metrics = {
-            'ba_clip': ba_clip,
-            'ba_conditions': ba_conditions,
-            'speech_acc': speech_acc,
-            'nonspeech_acc': nonspeech_acc,
-            'n_samples': len(results_df),
-            'condition_metrics': condition_metrics,
+            "ba_clip": float(ba_clip),
+            "ba_conditions": float(ba_conditions),
+            "ba_duration": float(ba_duration),
+            "ba_snr": float(ba_snr),
+            "ba_filter": float(ba_filter),
+            "ba_reverb": float(ba_reverb),
+            "speech_acc": float(speech_acc),
+            "nonspeech_acc": float(nonspeech_acc),
+            "n_samples": int(len(results_df)),
+            "condition_metrics": condition_metrics,
+            "duration_metrics": duration_metrics,
+            "snr_metrics": snr_metrics,
+            "filter_metrics": filter_metrics,
+            "reverb_metrics": reverb_metrics,
         }
 
         return ba_clip, ba_conditions, metrics
@@ -955,7 +1048,7 @@ def main():
     # Load initial prompts if provided
     initial_prompts = []
     if args.initial_prompts_json:
-        with open(args.initial_prompts_json, "r", encoding="utf-8") as f:
+        with open(args.initial_prompts_json, encoding="utf-8") as f:
             initial_prompts = json.load(f)
         print(f"\nLoaded {len(initial_prompts)} initial prompts from {args.initial_prompts_json}")
 
