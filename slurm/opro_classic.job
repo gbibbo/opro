@@ -1,0 +1,173 @@
+#!/bin/bash
+#SBATCH --job-name=opro_classic
+#SBATCH --output=logs/opro_classic_%j.out
+#SBATCH --error=logs/opro_classic_%j.err
+#SBATCH --time=48:00:00
+#SBATCH --mem=32G
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --partition=gpu
+
+# ==============================================================================
+# OPRO Classic: Prompt Optimization with Local LLM
+# ==============================================================================
+#
+# This job runs the complete OPRO Classic optimization pipeline:
+# - Uses local LLM (Qwen2.5-7B-Instruct) to generate prompts
+# - Evaluates with Qwen2-Audio-7B-Instruct (base or LoRA)
+# - Optimizes composite reward: R = BA_clip + 0.25·BA_cond - 0.05·len/100
+# - Tracks 4 psychoacoustic metrics: duration, SNR, filter, reverb
+#
+# Usage:
+#   sbatch slurm/opro_classic.job [base|lora] [seed]
+#
+# Examples:
+#   sbatch slurm/opro_classic.job base 42
+#   sbatch slurm/opro_classic.job lora 123
+#
+# ==============================================================================
+
+set -e
+set -u
+
+# Parse arguments
+MODE=${1:-base}
+SEED=${2:-42}
+
+echo "============================================"
+echo "OPRO CLASSIC - SLURM JOB"
+echo "============================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Mode: $MODE"
+echo "Seed: $SEED"
+echo "Start time: $(date)"
+echo "============================================"
+
+# Create logs directory
+mkdir -p logs
+
+# Load modules (adjust for your cluster)
+module purge
+module load anaconda3/2023.03
+module load cuda/11.8
+
+# Activate conda environment
+source activate qwen_audio
+echo "Conda environment: $CONDA_DEFAULT_ENV"
+
+# Verify GPU
+echo ""
+echo "GPU Information:"
+nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
+echo ""
+
+# Configuration
+MANIFEST="data/processed/conditions_final/conditions_manifest_split.parquet"
+SPLIT="dev"
+OPTIMIZER_LLM="Qwen/Qwen2.5-7B-Instruct"
+NUM_ITERATIONS=30
+CANDIDATES_PER_ITER=3
+EARLY_STOPPING=5
+
+# Output directory
+if [ "$MODE" == "base" ]; then
+    OUTPUT_DIR="results/opro_classic_base_seed${SEED}"
+    CHECKPOINT_ARG="--no_lora"
+elif [ "$MODE" == "lora" ]; then
+    CHECKPOINT="checkpoints/qwen_lora_seed${SEED}/final"
+    OUTPUT_DIR="results/opro_classic_lora_seed${SEED}"
+
+    if [ ! -d "$CHECKPOINT" ]; then
+        echo "ERROR: Checkpoint not found: $CHECKPOINT"
+        echo "Please train a LoRA checkpoint first or use 'base' mode."
+        exit 1
+    fi
+
+    CHECKPOINT_ARG="--checkpoint $CHECKPOINT"
+else
+    echo "ERROR: Invalid mode: $MODE"
+    echo "Usage: sbatch slurm/opro_classic.job [base|lora] [seed]"
+    exit 1
+fi
+
+mkdir -p "$OUTPUT_DIR"
+
+echo "Configuration:"
+echo "  Manifest: $MANIFEST"
+echo "  Split: $SPLIT"
+echo "  Optimizer LLM: $OPTIMIZER_LLM"
+echo "  Iterations: $NUM_ITERATIONS"
+echo "  Candidates/iter: $CANDIDATES_PER_ITER"
+echo "  Early stopping: $EARLY_STOPPING"
+echo "  Output: $OUTPUT_DIR"
+echo "  Checkpoint: $CHECKPOINT_ARG"
+echo ""
+
+# Save job info
+cat > "$OUTPUT_DIR/job_info.txt" <<EOF
+Job ID: $SLURM_JOB_ID
+Node: $SLURM_NODELIST
+Mode: $MODE
+Seed: $SEED
+Start time: $(date)
+Manifest: $MANIFEST
+Split: $SPLIT
+Optimizer LLM: $OPTIMIZER_LLM
+Iterations: $NUM_ITERATIONS
+Candidates/iter: $CANDIDATES_PER_ITER
+Output: $OUTPUT_DIR
+EOF
+
+# Run OPRO Classic
+echo "============================================"
+echo "STARTING OPRO CLASSIC OPTIMIZATION"
+echo "============================================"
+echo ""
+
+python scripts/opro_classic_optimize.py \
+    --manifest "$MANIFEST" \
+    --split "$SPLIT" \
+    --output_dir "$OUTPUT_DIR" \
+    $CHECKPOINT_ARG \
+    --optimizer_llm "$OPTIMIZER_LLM" \
+    --num_iterations $NUM_ITERATIONS \
+    --candidates_per_iter $CANDIDATES_PER_ITER \
+    --early_stopping $EARLY_STOPPING \
+    --seed $SEED
+
+EXIT_CODE=$?
+
+echo ""
+echo "============================================"
+echo "OPRO CLASSIC COMPLETE"
+echo "============================================"
+echo "Exit code: $EXIT_CODE"
+echo "End time: $(date)"
+echo ""
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo "✓ SUCCESS"
+    echo ""
+    echo "Results saved to: $OUTPUT_DIR"
+    echo ""
+
+    if [ -f "$OUTPUT_DIR/best_prompt.txt" ]; then
+        echo "Best prompt:"
+        cat "$OUTPUT_DIR/best_prompt.txt"
+        echo ""
+    fi
+
+    if [ -f "$OUTPUT_DIR/best_metrics.json" ]; then
+        echo "Best metrics:"
+        cat "$OUTPUT_DIR/best_metrics.json"
+        echo ""
+    fi
+else
+    echo "✗ FAILED with exit code $EXIT_CODE"
+    echo "Check logs in: logs/opro_classic_${SLURM_JOB_ID}.err"
+fi
+
+echo "============================================"
+
+exit $EXIT_CODE
