@@ -730,6 +730,8 @@ def make_evaluator_fn(args, evaluator_model):
 
                 # Create condition string from variant_type and corresponding value
                 variant_type = row.get("variant_type", "unknown")
+
+                # For standard single-dimension variants, use specific condition strings
                 if variant_type == "duration":
                     condition = f"dur_{row.get('duration_ms', 'unk')}ms"
                 elif variant_type == "snr":
@@ -739,7 +741,13 @@ def make_evaluator_fn(args, evaluator_model):
                 elif variant_type == "rir":
                     condition = f"reverb_T60_{row.get('T60', 'unk')}s"
                 else:
-                    condition = "unknown"
+                    # For "combo" or unknown variant_type, derive from duration_ms and snr_db
+                    dm = row.get("duration_ms", None)
+                    sn = row.get("snr_db", None)
+                    if pd.notna(dm) and pd.notna(sn):
+                        condition = f"dur_{int(dm)}_snr_{int(sn)}"
+                    else:
+                        condition = "unknown"
 
                 results.append(
                     {

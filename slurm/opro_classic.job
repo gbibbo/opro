@@ -66,8 +66,8 @@ echo ""
 MANIFEST="data/processed/conditions_final/conditions_manifest_split.parquet"
 SPLIT="dev"
 OPTIMIZER_LLM="Qwen/Qwen2.5-7B-Instruct"
-NUM_ITERATIONS=30
-CANDIDATES_PER_ITER=3
+NUM_ITERATIONS=10
+CANDIDATES_PER_ITER=6
 EARLY_STOPPING=5
 
 # Output directory
