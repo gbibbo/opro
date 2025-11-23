@@ -31,12 +31,13 @@ export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
 echo "[RUN] OPRO Classic on LORA model (seed $SEED)"
 
 apptainer exec --nv \
+  --pwd "$REPO" \
   --env HF_HOME="$HF_HOME" \
   --env TRANSFORMERS_CACHE="$TRANSFORMERS_CACHE" \
   --env HF_HUB_CACHE="$HF_HUB_CACHE" \
   --env PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True" \
   "$CONTAINER" python3 scripts/opro_classic_optimize.py \
-  --manifest "$REPO/data/processed/conditions_final/conditions_manifest_split.parquet" \
+  --manifest /mnt/fast/nobackup/users/gb0048/opro/data/processed/conditions_final/conditions_manifest_split.parquet \
   --split dev \
   --output_dir results/opro_classic_lora_seed${SEED} \
   --checkpoint checkpoints/qwen_lora_seed${SEED}/final \
