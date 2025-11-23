@@ -1,0 +1,10 @@
+{
+  "random_seed": 42,
+  "test_size": 0.2,
+  "total_samples": 1740,
+  "total_clips": 87,
+  "dev_samples": 1400,
+  "test_samples": 340,
+  "dev_clips": 70,
+  "test_clips": 17
+}
