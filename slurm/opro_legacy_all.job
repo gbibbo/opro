@@ -1,0 +1,135 @@
+#!/bin/bash
+#SBATCH --job-name=opro_legacy
+#SBATCH --partition=debug
+#SBATCH --gpus=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=03:59:00
+#SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro/logs/opro_legacy_%j.out
+#SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro/logs/opro_legacy_%j.err
+
+# OPRO Legacy: Run A/B, MC, and Open experiments with experimental_variants data
+
+set -euo pipefail
+set -x
+
+REPO="/mnt/fast/nobackup/users/gb0048/opro"
+CONTAINER="$REPO/qwen_pipeline_v2.sif"
+
+echo "[INFO] Start: $(date)"
+nvidia-smi --query-gpu=name,memory.total --format=csv
+cd "$REPO"
+
+export HF_HOME="/mnt/fast/nobackup/users/gb0048/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HOME/hub"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+
+# Verify data exists
+test -f data/processed/experimental_variants/dev_metadata.csv || { echo "[ERR] dev_metadata.csv not found"; exit 1; }
+echo "[OK] dev_metadata.csv found"
+
+# Create symlink for path compatibility
+ln -sfn "$REPO/data/processed" processed
+
+# Create template files
+mkdir -p prompts
+
+cat > prompts/ab.json << 'EOF'
+{
+  "format": "ab",
+  "templates": [
+    {"id":"ab_01","text":"Binary decision. Output exactly one token: SPEECH or NONSPEECH.","mapping":{"A":"SPEECH","B":"NONSPEECH"},"verbalizers":["SPEECH","NONSPEECH"]},
+    {"id":"ab_07","text":"Task: Speech detection. Select one:\nA) Speech\nB) Non-speech","mapping":{"A":"SPEECH","B":"NONSPEECH"},"verbalizers":["SPEECH","NONSPEECH"]}
+  ]
+}
+EOF
+
+cat > prompts/mc.json << 'EOF'
+{
+  "format": "mc",
+  "templates": [
+    {"id":"mc_05","text":"What do you hear?\nA) Person talking/speaking\nB) Song or melody\nC) Background noise\nD) Beeps/clicks/other","mapping":{"A":"SPEECH","B":"NONSPEECH","C":"NONSPEECH","D":"NONSPEECH"},"verbalizers":["SPEECH","NONSPEECH"]}
+  ]
+}
+EOF
+
+cat > prompts/open.json << 'EOF'
+{
+  "format": "open",
+  "templates": [
+    {"id":"open_01","text":"Describe the main content of the audio in <=3 words, then decide: SPEECH or NONSPEECH. Output only SPEECH or NONSPEECH at the end.","mapping":{},"verbalizers":["SPEECH","NONSPEECH"]}
+  ]
+}
+EOF
+
+echo "[OK] Templates created"
+
+# Run OPRO A/B
+echo "[RUN] OPRO A/B"
+apptainer exec --nv \
+  --pwd "$REPO" \
+  --env HF_HOME="$HF_HOME" \
+  --env TRANSFORMERS_CACHE="$TRANSFORMERS_CACHE" \
+  --env HF_HUB_CACHE="$HF_HUB_CACHE" \
+  --env PYTORCH_CUDA_ALLOC_CONF="$PYTORCH_CUDA_ALLOC_CONF" \
+  "$CONTAINER" python3 scripts/opro_post_ft_v2.py \
+  --no_lora \
+  --train_csv data/processed/experimental_variants/dev_metadata.csv \
+  --templates_file prompts/ab.json \
+  --decoding ab \
+  --output_dir results/opro_ab \
+  --num_iterations 10 \
+  --samples_per_iter 100 \
+  --num_candidates 12
+
+# Run OPRO MC
+echo "[RUN] OPRO MC"
+apptainer exec --nv \
+  --pwd "$REPO" \
+  --env HF_HOME="$HF_HOME" \
+  --env TRANSFORMERS_CACHE="$TRANSFORMERS_CACHE" \
+  --env HF_HUB_CACHE="$HF_HUB_CACHE" \
+  --env PYTORCH_CUDA_ALLOC_CONF="$PYTORCH_CUDA_ALLOC_CONF" \
+  "$CONTAINER" python3 scripts/opro_post_ft_v2.py \
+  --no_lora \
+  --train_csv data/processed/experimental_variants/dev_metadata.csv \
+  --templates_file prompts/mc.json \
+  --decoding mc \
+  --output_dir results/opro_mc \
+  --num_iterations 10 \
+  --samples_per_iter 100 \
+  --num_candidates 12
+
+# Run OPRO Open
+echo "[RUN] OPRO Open"
+apptainer exec --nv \
+  --pwd "$REPO" \
+  --env HF_HOME="$HF_HOME" \
+  --env TRANSFORMERS_CACHE="$TRANSFORMERS_CACHE" \
+  --env HF_HUB_CACHE="$HF_HUB_CACHE" \
+  --env PYTORCH_CUDA_ALLOC_CONF="$PYTORCH_CUDA_ALLOC_CONF" \
+  "$CONTAINER" python3 scripts/opro_post_ft_v2.py \
+  --no_lora \
+  --train_csv data/processed/experimental_variants/dev_metadata.csv \
+  --templates_file prompts/open.json \
+  --decoding open \
+  --output_dir results/opro_open \
+  --num_iterations 10 \
+  --samples_per_iter 100 \
+  --num_candidates 12
+
+echo "[DONE] End: $(date)"
+echo ""
+echo "=== RESULTS ==="
+echo ""
+echo "=== A/B Best Prompt ==="
+cat results/opro_ab/best_prompt.txt 2>/dev/null || echo "Check best_prompt.json"
+echo ""
+echo "=== MC Best Prompt ==="
+cat results/opro_mc/best_prompt.txt 2>/dev/null || echo "Check best_prompt.json"
+echo ""
+echo "=== Open Best Prompt ==="
+cat results/opro_open/best_prompt.txt 2>/dev/null || echo "Check best_prompt.json"
