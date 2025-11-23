@@ -57,10 +57,29 @@ cat > prompts/open.json << 'JSON'
 JSON
 echo "[OK] Template Open creado"
 
-##### 3) EJECUTAR OPRO EN DEV (datos existentes) PARA CADA FORMATO
+##### 3) CONFIGURAR APPTAINER
+REPO="/mnt/fast/nobackup/users/gb0048/opro"
+CONTAINER="$REPO/qwen_pipeline_v2.sif"
+
+if [ ! -f "$CONTAINER" ]; then
+    echo "[ERR] Container not found: $CONTAINER"
+    exit 1
+fi
+echo "[OK] Container found: $CONTAINER"
+
+# Función para ejecutar Python dentro del contenedor
+run_python() {
+    apptainer exec --nv \
+        --pwd "$REPO" \
+        --env HF_HOME="$HF_HOME" \
+        --env TRANSFORMERS_VERBOSITY=info \
+        "$CONTAINER" python3 "$@"
+}
+
+##### 4) EJECUTAR OPRO EN DEV (datos existentes) PARA CADA FORMATO
 echo ""
 echo "=== Ejecutando OPRO A/B ==="
-python scripts/opro_post_ft_v2.py \
+run_python scripts/opro_post_ft_v2.py \
   --no_lora \
   --train_csv data/processed/experimental_variants/dev_metadata.csv \
   --templates_file prompts/ab.json \
@@ -72,7 +91,7 @@ python scripts/opro_post_ft_v2.py \
 
 echo ""
 echo "=== Ejecutando OPRO MC ==="
-python scripts/opro_post_ft_v2.py \
+run_python scripts/opro_post_ft_v2.py \
   --no_lora \
   --train_csv data/processed/experimental_variants/dev_metadata.csv \
   --templates_file prompts/mc.json \
@@ -84,7 +103,7 @@ python scripts/opro_post_ft_v2.py \
 
 echo ""
 echo "=== Ejecutando OPRO Open ==="
-python scripts/opro_post_ft_v2.py \
+run_python scripts/opro_post_ft_v2.py \
   --no_lora \
   --train_csv data/processed/experimental_variants/dev_metadata.csv \
   --templates_file prompts/open.json \
@@ -94,7 +113,7 @@ python scripts/opro_post_ft_v2.py \
   --samples_per_iter 100 \
   --num_candidates 12
 
-##### 4) VER RESULTADOS RESUMIDOS
+##### 5) VER RESULTADOS RESUMIDOS
 echo ""
 echo "=== RESULTADOS ==="
 echo ""
