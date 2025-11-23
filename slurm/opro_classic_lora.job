@@ -4,7 +4,7 @@
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=48G
-#SBATCH --time=48:00:00
+#SBATCH --time=03:59:00
 #SBATCH --output=/mnt/fast/nobackup/users/gb0048/opro/logs/opro_classic_lora_%j.out
 #SBATCH --error=/mnt/fast/nobackup/users/gb0048/opro/logs/opro_classic_lora_%j.err
 
