@@ -36,7 +36,7 @@ apptainer exec --nv \
   --env HF_HUB_CACHE="$HF_HUB_CACHE" \
   --env PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True" \
   "$CONTAINER" python3 scripts/opro_classic_optimize.py \
-  --manifest data/processed/conditions_final/conditions_manifest_split.parquet \
+  --manifest "$REPO/data/processed/conditions_final/conditions_manifest_split.parquet" \
   --split dev \
   --output_dir results/opro_classic_lora_seed${SEED} \
   --checkpoint checkpoints/qwen_lora_seed${SEED}/final \

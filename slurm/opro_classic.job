@@ -126,7 +126,7 @@ echo "============================================"
 echo ""
 
 python scripts/opro_classic_optimize.py \
-    --manifest "$MANIFEST" \
+    --manifest "$(pwd)/$MANIFEST" \
     --split "$SPLIT" \
     --output_dir "$OUTPUT_DIR" \
     $CHECKPOINT_ARG \
