@@ -57,7 +57,7 @@ cat > prompts/open.json << 'JSON'
 JSON
 echo "[OK] Template Open creado"
 
-##### 3) CONFIGURAR APPTAINER
+##### 3) CONFIGURAR APPTAINER/SINGULARITY
 REPO="/mnt/fast/nobackup/users/gb0048/opro"
 CONTAINER="$REPO/qwen_pipeline_v2.sif"
 
@@ -67,9 +67,22 @@ if [ ! -f "$CONTAINER" ]; then
 fi
 echo "[OK] Container found: $CONTAINER"
 
+# Detectar si usar apptainer o singularity
+if command -v apptainer &> /dev/null; then
+    CONTAINER_CMD="apptainer"
+    echo "[OK] Using apptainer"
+elif command -v singularity &> /dev/null; then
+    CONTAINER_CMD="singularity"
+    echo "[OK] Using singularity"
+else
+    echo "[ERR] Neither apptainer nor singularity found in PATH"
+    echo "[INFO] Try: module load singularity"
+    exit 1
+fi
+
 # Función para ejecutar Python dentro del contenedor
 run_python() {
-    apptainer exec --nv \
+    $CONTAINER_CMD exec --nv \
         --pwd "$REPO" \
         --env HF_HOME="$HF_HOME" \
         --env TRANSFORMERS_VERBOSITY=info \
