@@ -358,7 +358,7 @@ where:
 
 BASELINE PROMPT:
 Prompt: "{self.baseline_prompt}"
-Reward: {self.baseline_reward:.4f if self.baseline_reward else 'evaluating...'}
+Reward: {f"{self.baseline_reward:.4f}" if self.baseline_reward is not None else "evaluating..."}
 
 CURRENT ITERATION: {iteration}
 
