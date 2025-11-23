@@ -60,6 +60,16 @@ source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
 conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda environment"; exit 1; }
 echo "Conda environment: $CONDA_DEFAULT_ENV"
 
+# Ensure bitsandbytes is installed (required for 4-bit quantization)
+echo ""
+echo "Checking dependencies..."
+if ! python -c "import bitsandbytes" 2>/dev/null; then
+    echo "Installing bitsandbytes..."
+    pip install bitsandbytes --no-cache-dir
+else
+    echo "✓ bitsandbytes already installed"
+fi
+
 # Verify GPU
 echo ""
 echo "GPU Information:"
