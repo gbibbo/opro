@@ -702,11 +702,12 @@ def make_evaluator_fn(args, evaluator_model):
             audio_path = row["audio_path"]
             ground_truth = row["label"]
 
-            # Handle path resolution
-            audio_path = Path(audio_path)
-            if not audio_path.exists():
-                audio_path = Path("data") / audio_path
+            # Handle path resolution - convert Windows backslashes to forward slashes
+            audio_path_str = str(audio_path).replace("\\", "/")
+            audio_path = Path(audio_path_str)
 
+            # If path is relative and doesn't exist, it's already correct
+            # (manifest paths are relative to repo root)
             if not audio_path.exists():
                 print(f"  WARNING: File not found: {audio_path}")
                 continue
