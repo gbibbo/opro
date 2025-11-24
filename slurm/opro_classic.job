@@ -77,12 +77,72 @@ nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
 echo ""
 
 # Configuration
-MANIFEST="data/processed/conditions_final/conditions_manifest_split.parquet"
+MANIFEST="data/processed/experimental_variants/dev_metadata.csv"
 SPLIT="dev"
 OPTIMIZER_LLM="Qwen/Qwen2.5-7B-Instruct"
 NUM_ITERATIONS=10
 CANDIDATES_PER_ITER=6
 EARLY_STOPPING=5
+
+# Create symlink for path compatibility (some paths may start with "processed/")
+ln -sfn "$(pwd)/data/processed" processed
+
+# Verify manifest exists
+if [ ! -f "$MANIFEST" ]; then
+    echo "ERROR: Manifest not found: $MANIFEST"
+    exit 1
+fi
+
+echo "Verifying audio paths..."
+python - <<'PY'
+import pandas as pd
+import os
+import sys
+
+manifest = "data/processed/experimental_variants/dev_metadata.csv"
+if not os.path.exists(manifest):
+    print(f"ERROR: Manifest not found: {manifest}")
+    sys.exit(1)
+
+df = pd.read_csv(manifest)
+print(f"Loaded {len(df)} samples from manifest")
+
+def resolve_path(p):
+    p_str = str(p).replace("\\", "/")
+    if os.path.isabs(p_str) and os.path.isfile(p_str):
+        return p_str
+    if os.path.isfile(p_str):
+        return p_str
+    if p_str.startswith("processed/"):
+        candidate = os.path.join("data", p_str)
+        if os.path.isfile(candidate):
+            return candidate
+    candidate = os.path.join(os.getcwd(), p_str)
+    if os.path.isfile(candidate):
+        return candidate
+    return None
+
+df["resolved"] = df["audio_path"].map(resolve_path)
+ok_ratio = df["resolved"].notna().mean()
+
+print(f"Files found: {ok_ratio:.1%} ({df['resolved'].notna().sum()}/{len(df)})")
+
+if ok_ratio < 0.95:
+    print(f"\nERROR: Only {ok_ratio:.1%} of audio files found!")
+    print("Missing files (first 5):")
+    for p in df[df["resolved"].isna()]["audio_path"].head(5):
+        print(f"  - {p}")
+    sys.exit(1)
+
+print("✓ Audio path verification passed")
+PY
+
+if [ $? -ne 0 ]; then
+    echo "Audio path verification failed. Aborting."
+    exit 1
+fi
+
+echo ""
 
 # Output directory
 if [ "$MODE" == "base" ]; then

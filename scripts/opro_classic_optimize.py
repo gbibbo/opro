@@ -675,14 +675,76 @@ def make_evaluator_fn(args, evaluator_model):
     Returns:
         Function that takes a prompt and returns (ba_clip, ba_cond, metrics)
     """
-    # Load manifest
-    manifest_df = pd.read_parquet(args.manifest)
-    split_df = manifest_df[manifest_df["split"] == args.split].copy()
+    # Load manifest (support both CSV and Parquet)
+    manifest_path = Path(args.manifest)
+    if manifest_path.suffix == ".csv":
+        manifest_df = pd.read_csv(args.manifest)
+        # Normalize column names if using experimental_variants CSV
+        if "ground_truth" in manifest_df.columns and "label" not in manifest_df.columns:
+            manifest_df["label"] = manifest_df["ground_truth"]
+    else:
+        manifest_df = pd.read_parquet(args.manifest)
+
+    # Filter by split if split column exists
+    if "split" in manifest_df.columns:
+        split_df = manifest_df[manifest_df["split"] == args.split].copy()
+    else:
+        split_df = manifest_df.copy()
 
     print("\nDataset loaded:")
     print(f"  Manifest: {args.manifest}")
     print(f"  Split: {args.split}")
     print(f"  Samples: {len(split_df)}")
+
+    # Resolve and validate audio paths
+    def resolve_audio_path(p):
+        """Resolve audio path, handling relative paths from repo root."""
+        import os
+        p_str = str(p).replace("\\", "/")
+
+        # If absolute and exists, return it
+        if os.path.isabs(p_str) and os.path.isfile(p_str):
+            return p_str
+
+        # Try as-is from current directory
+        if os.path.isfile(p_str):
+            return os.path.abspath(p_str)
+
+        # If starts with "processed/", prepend "data/"
+        if p_str.startswith("processed/"):
+            candidate = os.path.join("data", p_str)
+            if os.path.isfile(candidate):
+                return os.path.abspath(candidate)
+
+        # Try from repo root
+        candidate = os.path.join(os.getcwd(), p_str)
+        if os.path.isfile(candidate):
+            return candidate
+
+        # Last resort: return original for error reporting
+        return p_str
+
+    split_df["audio_resolved"] = split_df["audio_path"].map(resolve_audio_path)
+
+    # Validate that files exist
+    existing_mask = split_df["audio_resolved"].map(lambda x: Path(x).is_file())
+    exist_ratio = existing_mask.mean()
+
+    print(f"  Files found: {exist_ratio:.1%} ({existing_mask.sum()}/{len(split_df)})")
+
+    if exist_ratio < 0.95:
+        print(f"\n  ⚠️  WARNING: Only {exist_ratio:.1%} of audio files found!")
+        print("  Missing files (first 5):")
+        for p in split_df[~existing_mask]["audio_path"].head(5):
+            print(f"    - {p}")
+        raise RuntimeError(
+            f"Only {exist_ratio:.1%} of audio files exist. "
+            "Check manifest paths and ensure data is accessible."
+        )
+
+    # Keep only existing files
+    split_df = split_df[existing_mask].copy()
+    print(f"  Proceeding with {len(split_df)} valid samples")
 
     def evaluator_fn(prompt: str) -> tuple[float, float, dict]:
         """
@@ -699,21 +761,11 @@ def make_evaluator_fn(args, evaluator_model):
         for _, row in tqdm(
             split_df.iterrows(), total=len(split_df), desc="  Evaluating", leave=False
         ):
-            audio_path = row["audio_path"]
+            audio_path = row["audio_resolved"]
             ground_truth = row["label"]
 
-            # Handle path resolution - convert Windows backslashes to forward slashes
-            audio_path_str = str(audio_path).replace("\\", "/")
-            audio_path = Path(audio_path_str)
-
-            # If path is relative and doesn't exist, it's already correct
-            # (manifest paths are relative to repo root)
-            if not audio_path.exists():
-                print(f"  WARNING: File not found: {audio_path}")
-                continue
-
             try:
-                result = evaluator_model.predict(str(audio_path.resolve()), return_scores=True)
+                result = evaluator_model.predict(audio_path, return_scores=True)
 
                 # Normalize prediction
                 normalized_label, confidence = normalize_to_binary(
