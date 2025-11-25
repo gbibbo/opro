@@ -84,6 +84,15 @@ NUM_ITERATIONS=10
 CANDIDATES_PER_ITER=6
 EARLY_STOPPING=5
 
+# Sampling configuration (for faster iterations)
+# Set to 0 to use full dataset (3456 samples), or use subset for smoke tests:
+#   - 200-400: quick smoke test (30-60 min/iteration)
+#   - 600-800: medium validation
+#   - 0: full dev set (slow but complete)
+MAX_EVAL_SAMPLES=400
+SAMPLE_STRATEGY="stratified"  # uniform, stratified, per_condition
+PER_CONDITION_K=5
+
 # Create symlink for path compatibility (some paths may start with "processed/")
 ln -sfn "$(pwd)/data/processed" processed
 
@@ -174,6 +183,7 @@ echo "  Optimizer LLM: $OPTIMIZER_LLM"
 echo "  Iterations: $NUM_ITERATIONS"
 echo "  Candidates/iter: $CANDIDATES_PER_ITER"
 echo "  Early stopping: $EARLY_STOPPING"
+echo "  Max eval samples: $MAX_EVAL_SAMPLES (0=all, strategy=$SAMPLE_STRATEGY)"
 echo "  Output: $OUTPUT_DIR"
 echo "  Checkpoint: $CHECKPOINT_ARG"
 echo ""
@@ -208,6 +218,9 @@ python scripts/opro_classic_optimize.py \
     --num_iterations $NUM_ITERATIONS \
     --candidates_per_iter $CANDIDATES_PER_ITER \
     --early_stopping $EARLY_STOPPING \
+    --max_eval_samples $MAX_EVAL_SAMPLES \
+    --sample_strategy "$SAMPLE_STRATEGY" \
+    --per_condition_k $PER_CONDITION_K \
     --seed $SEED
 
 EXIT_CODE=$?

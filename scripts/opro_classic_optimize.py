@@ -746,6 +746,68 @@ def make_evaluator_fn(args, evaluator_model):
     split_df = split_df[existing_mask].copy()
     print(f"  Proceeding with {len(split_df)} valid samples")
 
+    # Apply sampling strategy if max_eval_samples is set
+    def create_eval_subset(df, max_samples, strategy, per_condition_k, seed):
+        """Create evaluation subset based on sampling strategy."""
+        if max_samples <= 0 or max_samples >= len(df):
+            return df
+
+        n = min(max_samples, len(df))
+        print(f"\n  Sampling {n} examples (strategy: {strategy})...")
+
+        if strategy == "uniform":
+            eval_df = df.sample(n=n, random_state=seed)
+
+        elif strategy == "stratified":
+            # Stratified sampling by ground_truth class
+            if "label" not in df.columns:
+                print("    WARNING: 'label' column not found, falling back to uniform")
+                eval_df = df.sample(n=n, random_state=seed)
+            else:
+                cls_counts = df["label"].value_counts(normalize=True)
+                parts = []
+                for cls, frac in cls_counts.items():
+                    k = max(1, int(round(n * frac)))
+                    cls_df = df[df["label"] == cls]
+                    sample_k = min(k, len(cls_df))
+                    parts.append(cls_df.sample(n=sample_k, random_state=seed))
+                eval_df = pd.concat(parts, ignore_index=True).sample(frac=1.0, random_state=seed)
+                if len(eval_df) > n:
+                    eval_df = eval_df.head(n)
+
+        else:  # per_condition
+            # Sample k examples per condition bucket
+            bucket_cols = [c for c in ["duration_ms", "snr_db", "band_filter", "T60", "label"]
+                          if c in df.columns]
+            if not bucket_cols:
+                bucket_cols = ["label"] if "label" in df.columns else []
+
+            if not bucket_cols:
+                print("    WARNING: No bucket columns found, falling back to uniform")
+                eval_df = df.sample(n=n, random_state=seed)
+            else:
+                eval_df = (
+                    df.groupby(bucket_cols, group_keys=False)
+                    .apply(lambda g: g.sample(n=min(per_condition_k, len(g)), random_state=seed))
+                )
+                eval_df = eval_df.sample(frac=1.0, random_state=seed)
+                if len(eval_df) > n:
+                    eval_df = eval_df.head(n)
+
+        print(f"    Sampled {len(eval_df)} examples")
+        if "label" in eval_df.columns:
+            class_dist = eval_df["label"].value_counts()
+            print(f"    Class distribution: {class_dist.to_dict()}")
+
+        return eval_df
+
+    # Store full dataset and sampling params for evaluator closure
+    full_split_df = split_df.copy()
+    max_eval_samples = args.max_eval_samples
+    sample_strategy = args.sample_strategy
+    per_condition_k = args.per_condition_k
+    eval_seed = args.seed
+
     def evaluator_fn(prompt: str) -> tuple[float, float, dict]:
         """
         Evaluate prompt on dataset.
@@ -756,10 +818,15 @@ def make_evaluator_fn(args, evaluator_model):
         # Update model prompt
         evaluator_model.user_prompt = prompt
 
-        # Evaluate on all samples
+        # Create evaluation subset (may be full dataset if max_eval_samples=0)
+        eval_df = create_eval_subset(
+            full_split_df, max_eval_samples, sample_strategy, per_condition_k, eval_seed
+        )
+
+        # Evaluate on samples
         results = []
         for _, row in tqdm(
-            split_df.iterrows(), total=len(split_df), desc="  Evaluating", leave=False
+            eval_df.iterrows(), total=len(eval_df), desc="  Evaluating", leave=False
         ):
             audio_path = row["audio_resolved"]
             ground_truth = row["label"]
@@ -1041,6 +1108,29 @@ def main():
         "--early_stopping",
         type=int,
         default=5,
+    )
+
+    # Sampling configuration (for faster smoke tests)
+    parser.add_argument(
+        "--max_eval_samples",
+        type=int,
+        default=0,
+        help="Limit evaluation to N samples per iteration (0 = use all). "
+        "Useful for smoke tests: try 200-600 for fast iteration.",
+    )
+    parser.add_argument(
+        "--sample_strategy",
+        type=str,
+        choices=["uniform", "stratified", "per_condition"],
+        default="stratified",
+        help="How to sample subset: uniform (random), stratified (preserve class balance), "
+        "per_condition (k samples per duration/SNR bucket).",
+    )
+    parser.add_argument(
+        "--per_condition_k",
+        type=int,
+        default=5,
+        help="Number of samples per condition bucket when sample_strategy=per_condition.",
     )
 
     # Reward weights
