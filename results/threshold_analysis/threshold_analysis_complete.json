@@ -1,0 +1,454 @@
+{
+  "prompt": "Is this short clip speech or noise? Your answer should be SPEECH or NON-SPEECH.",
+  "optimal_threshold": 0.15000000000000002,
+  "metrics_at_optimal": {
+    "ba": 0.7204861111111112,
+    "speech_acc": 0.8368055555555556,
+    "nonspeech_acc": 0.6041666666666666
+  },
+  "metrics_at_default": {
+    "ba": 0.7204861111111112,
+    "speech_acc": 0.8368055555555556,
+    "nonspeech_acc": 0.6041666666666666
+  },
+  "improvement": 0.0,
+  "condition_metrics": {
+    "dur_20_snr_-10": {
+      "ba": 0.6666666666666667,
+      "speech_acc": 0.5833333333333334,
+      "nonspeech_acc": 0.75,
+      "n_samples": 24
+    },
+    "dur_20_snr_-5": {
+      "ba": 0.6666666666666666,
+      "speech_acc": 0.6666666666666666,
+      "nonspeech_acc": 0.6666666666666666,
+      "n_samples": 24
+    },
+    "dur_20_snr_0": {
+      "ba": 0.6666666666666666,
+      "speech_acc": 0.6666666666666666,
+      "nonspeech_acc": 0.6666666666666666,
+      "n_samples": 24
+    },
+    "dur_20_snr_5": {
+      "ba": 0.625,
+      "speech_acc": 0.5833333333333334,
+      "nonspeech_acc": 0.6666666666666666,
+      "n_samples": 24
+    },
+    "dur_20_snr_10": {
+      "ba": 0.6666666666666667,
+      "speech_acc": 0.75,
+      "nonspeech_acc": 0.5833333333333334,
+      "n_samples": 24
+    },
+    "dur_20_snr_20": {
+      "ba": 0.7083333333333334,
+      "speech_acc": 0.8333333333333334,
+      "nonspeech_acc": 0.5833333333333334,
+      "n_samples": 24
+    },
+    "dur_40_snr_-10": {
+      "ba": 0.7083333333333333,
+      "speech_acc": 0.5,
+      "nonspeech_acc": 0.9166666666666666,
+      "n_samples": 24
+    },
+    "dur_40_snr_-5": {
+      "ba": 0.75,
+      "speech_acc": 0.75,
+      "nonspeech_acc": 0.75,
+      "n_samples": 24
+    },
+    "dur_40_snr_0": {
+      "ba": 0.7083333333333333,
+      "speech_acc": 0.75,
+      "nonspeech_acc": 0.6666666666666666,
+      "n_samples": 24
+    },
+    "dur_40_snr_5": {
+      "ba": 0.7083333333333333,
+      "speech_acc": 0.75,
+      "nonspeech_acc": 0.6666666666666666,
+      "n_samples": 24
+    },
+    "dur_40_snr_10": {
+      "ba": 0.7916666666666666,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.6666666666666666,
+      "n_samples": 24
+    },
+    "dur_40_snr_20": {
+      "ba": 0.7083333333333333,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5,
+      "n_samples": 24
+    },
+    "dur_60_snr_-10": {
+      "ba": 0.8333333333333333,
+      "speech_acc": 0.75,
+      "nonspeech_acc": 0.9166666666666666,
+      "n_samples": 24
+    },
+    "dur_60_snr_-5": {
+      "ba": 0.6666666666666666,
+      "speech_acc": 0.6666666666666666,
+      "nonspeech_acc": 0.6666666666666666,
+      "n_samples": 24
+    },
+    "dur_60_snr_0": {
+      "ba": 0.6666666666666666,
+      "speech_acc": 0.6666666666666666,
+      "nonspeech_acc": 0.6666666666666666,
+      "n_samples": 24
+    },
+    "dur_60_snr_5": {
+      "ba": 0.625,
+      "speech_acc": 0.6666666666666666,
+      "nonspeech_acc": 0.5833333333333334,
+      "n_samples": 24
+    },
+    "dur_60_snr_10": {
+      "ba": 0.75,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5833333333333334,
+      "n_samples": 24
+    },
+    "dur_60_snr_20": {
+      "ba": 0.6666666666666666,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.4166666666666667,
+      "n_samples": 24
+    },
+    "dur_80_snr_-10": {
+      "ba": 0.7916666666666666,
+      "speech_acc": 0.6666666666666666,
+      "nonspeech_acc": 0.9166666666666666,
+      "n_samples": 24
+    },
+    "dur_80_snr_-5": {
+      "ba": 0.7916666666666667,
+      "speech_acc": 0.75,
+      "nonspeech_acc": 0.8333333333333334,
+      "n_samples": 24
+    },
+    "dur_80_snr_0": {
+      "ba": 0.6666666666666667,
+      "speech_acc": 0.75,
+      "nonspeech_acc": 0.5833333333333334,
+      "n_samples": 24
+    },
+    "dur_80_snr_5": {
+      "ba": 0.75,
+      "speech_acc": 0.8333333333333334,
+      "nonspeech_acc": 0.6666666666666666,
+      "n_samples": 24
+    },
+    "dur_80_snr_10": {
+      "ba": 0.75,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5833333333333334,
+      "n_samples": 24
+    },
+    "dur_80_snr_20": {
+      "ba": 0.7083333333333333,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5,
+      "n_samples": 24
+    },
+    "dur_100_snr_-10": {
+      "ba": 0.8333333333333334,
+      "speech_acc": 0.8333333333333334,
+      "nonspeech_acc": 0.8333333333333334,
+      "n_samples": 24
+    },
+    "dur_100_snr_-5": {
+      "ba": 0.7916666666666666,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.6666666666666666,
+      "n_samples": 24
+    },
+    "dur_100_snr_0": {
+      "ba": 0.75,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5833333333333334,
+      "n_samples": 24
+    },
+    "dur_100_snr_5": {
+      "ba": 0.7083333333333333,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5,
+      "n_samples": 24
+    },
+    "dur_100_snr_10": {
+      "ba": 0.7083333333333333,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5,
+      "n_samples": 24
+    },
+    "dur_100_snr_20": {
+      "ba": 0.7083333333333333,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5,
+      "n_samples": 24
+    },
+    "dur_200_snr_-10": {
+      "ba": 0.8333333333333333,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.75,
+      "n_samples": 24
+    },
+    "dur_200_snr_-5": {
+      "ba": 0.7916666666666666,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.6666666666666666,
+      "n_samples": 24
+    },
+    "dur_200_snr_0": {
+      "ba": 0.75,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5833333333333334,
+      "n_samples": 24
+    },
+    "dur_200_snr_5": {
+      "ba": 0.75,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5833333333333334,
+      "n_samples": 24
+    },
+    "dur_200_snr_10": {
+      "ba": 0.7916666666666666,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.6666666666666666,
+      "n_samples": 24
+    },
+    "dur_200_snr_20": {
+      "ba": 0.6666666666666666,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.4166666666666667,
+      "n_samples": 24
+    },
+    "dur_500_snr_-10": {
+      "ba": 0.7083333333333333,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5,
+      "n_samples": 24
+    },
+    "dur_500_snr_-5": {
+      "ba": 0.6666666666666666,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.4166666666666667,
+      "n_samples": 24
+    },
+    "dur_500_snr_0": {
+      "ba": 0.75,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5833333333333334,
+      "n_samples": 24
+    },
+    "dur_500_snr_5": {
+      "ba": 0.7083333333333333,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5,
+      "n_samples": 24
+    },
+    "dur_500_snr_10": {
+      "ba": 0.7083333333333333,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5,
+      "n_samples": 24
+    },
+    "dur_500_snr_20": {
+      "ba": 0.7083333333333333,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5,
+      "n_samples": 24
+    },
+    "dur_1000_snr_-10": {
+      "ba": 0.75,
+      "speech_acc": 1.0,
+      "nonspeech_acc": 0.5,
+      "n_samples": 24
+    },
+    "dur_1000_snr_-5": {
+      "ba": 0.7083333333333334,
+      "speech_acc": 1.0,
+      "nonspeech_acc": 0.4166666666666667,
+      "n_samples": 24
+    },
+    "dur_1000_snr_0": {
+      "ba": 0.6666666666666666,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.4166666666666667,
+      "n_samples": 24
+    },
+    "dur_1000_snr_5": {
+      "ba": 0.7083333333333333,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5,
+      "n_samples": 24
+    },
+    "dur_1000_snr_10": {
+      "ba": 0.7083333333333333,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.5,
+      "n_samples": 24
+    },
+    "dur_1000_snr_20": {
+      "ba": 0.6666666666666666,
+      "speech_acc": 0.9166666666666666,
+      "nonspeech_acc": 0.4166666666666667,
+      "n_samples": 24
+    }
+  },
+  "threshold_sweep": [
+    {
+      "threshold": 0.0,
+      "ba": 0.5,
+      "speech_acc": 1.0,
+      "nonspeech_acc": 0.0,
+      "overall_acc": 0.5
+    },
+    {
+      "threshold": 0.05,
+      "ba": 0.5,
+      "speech_acc": 1.0,
+      "nonspeech_acc": 0.0,
+      "overall_acc": 0.5
+    },
+    {
+      "threshold": 0.1,
+      "ba": 0.5,
+      "speech_acc": 1.0,
+      "nonspeech_acc": 0.0,
+      "overall_acc": 0.5
+    },
+    {
+      "threshold": 0.15000000000000002,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.2,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.25,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.30000000000000004,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.35000000000000003,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.4,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.45,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.5,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.55,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.6000000000000001,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.65,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.7000000000000001,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.75,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.8,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.8500000000000001,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.9,
+      "ba": 0.7204861111111112,
+      "speech_acc": 0.8368055555555556,
+      "nonspeech_acc": 0.6041666666666666,
+      "overall_acc": 0.7204861111111112
+    },
+    {
+      "threshold": 0.9500000000000001,
+      "ba": 0.5,
+      "speech_acc": 0.0,
+      "nonspeech_acc": 1.0,
+      "overall_acc": 0.5
+    },
+    {
+      "threshold": 1.0,
+      "ba": 0.5,
+      "speech_acc": 0.0,
+      "nonspeech_acc": 1.0,
+      "overall_acc": 0.5
+    }
+  ]
+}

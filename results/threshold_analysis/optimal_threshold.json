@@ -1,0 +1,9 @@
+{
+  "optimal_threshold": 0.15000000000000002,
+  "best_ba": 0.7204861111111112,
+  "best_speech_acc": 0.8368055555555556,
+  "best_nonspeech_acc": 0.6041666666666666,
+  "default_threshold_ba": 0.7204861111111112,
+  "improvement_over_default": 0.0,
+  "prompt": "Is this short clip speech or noise? Your answer should be SPEECH or NON-SPEECH."
+}
