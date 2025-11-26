@@ -1,0 +1,335 @@
+#!/bin/bash
+#SBATCH --job-name=eval_thresh
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/eval_thresh_%j.out
+#SBATCH --error=logs/eval_thresh_%j.err
+
+# ==============================================================================
+# Evaluate with p_first_token threshold (supports base and LoRA)
+# ==============================================================================
+#
+# Usage:
+#   sbatch slurm/eval_with_threshold.job [base|lora] [threshold]
+#
+# Examples:
+#   sbatch slurm/eval_with_threshold.job base 0.50
+#   sbatch slurm/eval_with_threshold.job lora 0.50
+#
+# ==============================================================================
+
+set -e
+set -u
+
+# Parse arguments
+MODE=${1:-base}
+THRESHOLD=${2:-0.50}
+
+echo "============================================"
+echo "EVALUATION WITH p_first_token THRESHOLD"
+echo "============================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Mode: $MODE"
+echo "Threshold: $THRESHOLD"
+echo "Start time: $(date)"
+echo "============================================"
+
+mkdir -p logs
+
+# Setup environment
+export HF_HOME="/mnt/fast/nobackup/users/$USER/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HOME/hub"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+
+# Activate conda
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
+conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda"; exit 1; }
+echo "Conda environment: $CONDA_DEFAULT_ENV"
+
+# Ensure dependencies
+if ! python -c "import bitsandbytes" 2>/dev/null; then
+    pip install bitsandbytes --no-cache-dir
+fi
+if ! python -c "import peft" 2>/dev/null; then
+    pip install peft --no-cache-dir
+fi
+
+# GPU info
+nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
+
+# Symlink for path compatibility
+ln -sfn "$(pwd)/data/processed" processed
+
+# Best prompt from OPRO
+BEST_PROMPT="Is this short clip speech or noise? Your answer should be SPEECH or NON-SPEECH."
+
+# Configure based on mode
+if [ "$MODE" == "base" ]; then
+    OUTPUT_DIR="results/eval_base_thresh${THRESHOLD}"
+    LORA_PATH=""
+elif [ "$MODE" == "lora" ]; then
+    # Find most recent LoRA checkpoint
+    LORA_PATH=$(ls -td checkpoints/qwen_lora_*/final 2>/dev/null | head -1)
+    if [ -z "$LORA_PATH" ] || [ ! -d "$LORA_PATH" ]; then
+        echo "ERROR: No LoRA checkpoint found in checkpoints/qwen_lora_*/final"
+        exit 1
+    fi
+    OUTPUT_DIR="results/eval_lora_thresh${THRESHOLD}"
+    echo "Using LoRA checkpoint: $LORA_PATH"
+else
+    echo "ERROR: Invalid mode: $MODE (use 'base' or 'lora')"
+    exit 1
+fi
+
+mkdir -p "$OUTPUT_DIR"
+
+echo ""
+echo "Configuration:"
+echo "  Test manifest: data/processed/experimental_variants/test_metadata.csv"
+echo "  Best prompt: $BEST_PROMPT"
+echo "  Threshold: $THRESHOLD"
+echo "  Mode: $MODE"
+echo "  Output: $OUTPUT_DIR"
+echo ""
+
+# Run evaluation
+python - "$MODE" "$THRESHOLD" "$OUTPUT_DIR" "$LORA_PATH" "$BEST_PROMPT" <<'PY'
+import os
+import sys
+import json
+import pandas as pd
+import numpy as np
+from pathlib import Path
+from tqdm import tqdm
+
+# Parse arguments
+MODE = sys.argv[1]
+THRESHOLD = float(sys.argv[2])
+OUTPUT_DIR = Path(sys.argv[3])
+LORA_PATH = sys.argv[4] if sys.argv[4] else None
+BEST_PROMPT = sys.argv[5]
+
+# Add src to path
+sys.path.insert(0, str(Path.cwd()))
+
+print(f"\n{'='*60}")
+print(f"EVALUATION WITH p_first_token THRESHOLD")
+print(f"{'='*60}")
+print(f"Mode: {MODE}")
+print(f"Threshold: {THRESHOLD}")
+print(f"Prompt: {BEST_PROMPT}")
+
+# Load model
+print("\nLoading model...")
+if MODE == "base":
+    from src.qsm.models.qwen_audio import Qwen2AudioClassifier
+    model = Qwen2AudioClassifier(
+        model_name="Qwen/Qwen2-Audio-7B-Instruct",
+        device="cuda",
+        load_in_4bit=True,
+    )
+else:  # lora
+    from src.qsm.models.qwen_audio import Qwen2AudioClassifier
+    from peft import PeftModel
+    import torch
+
+    print(f"Loading base model...")
+    model = Qwen2AudioClassifier(
+        model_name="Qwen/Qwen2-Audio-7B-Instruct",
+        device="cuda",
+        load_in_4bit=True,
+    )
+
+    print(f"Loading LoRA adapter from: {LORA_PATH}")
+    model.model = PeftModel.from_pretrained(
+        model.model,
+        LORA_PATH,
+        torch_dtype=torch.float16,
+    )
+    model.model.eval()
+    print("LoRA adapter loaded!")
+
+model.user_prompt = BEST_PROMPT
+
+# Load test data
+TEST_MANIFEST = "data/processed/experimental_variants/test_metadata.csv"
+df = pd.read_csv(TEST_MANIFEST)
+if "ground_truth" in df.columns and "label" not in df.columns:
+    df["label"] = df["ground_truth"]
+
+print(f"\nTest samples: {len(df)}")
+
+# Resolve paths
+def resolve_path(p):
+    p_str = str(p).replace("\\", "/")
+    if os.path.isabs(p_str) and os.path.isfile(p_str):
+        return p_str
+    if os.path.isfile(p_str):
+        return os.path.abspath(p_str)
+    if p_str.startswith("processed/"):
+        candidate = os.path.join("data", p_str)
+        if os.path.isfile(candidate):
+            return os.path.abspath(candidate)
+    candidate = os.path.join(os.getcwd(), p_str)
+    if os.path.isfile(candidate):
+        return candidate
+    return p_str
+
+df["audio_resolved"] = df["audio_path"].map(resolve_path)
+exist_mask = df["audio_resolved"].map(lambda x: Path(x).is_file())
+print(f"Files found: {exist_mask.mean():.1%} ({exist_mask.sum()}/{len(df)})")
+
+if exist_mask.mean() < 0.95:
+    print("ERROR: Too many missing files!")
+    sys.exit(1)
+
+df = df[exist_mask].copy()
+print(f"Proceeding with {len(df)} samples")
+
+# Evaluate
+results = []
+for _, row in tqdm(df.iterrows(), total=len(df), desc="Evaluating"):
+    audio_path = row["audio_resolved"]
+    ground_truth = row["label"]
+
+    try:
+        result = model.predict(audio_path, return_scores=True)
+
+        # Get p_first_token
+        p_first = result.probs.get("p_first_token", 0.5) if result.probs else 0.5
+
+        # Apply threshold: p_first_token > threshold -> SPEECH
+        # Based on our analysis: higher p_first_token correlates with SPEECH
+        prediction = "SPEECH" if p_first > THRESHOLD else "NONSPEECH"
+
+        is_correct = (prediction == ground_truth)
+
+        # Derive condition
+        dm = row.get("duration_ms", None)
+        sn = row.get("snr_db", None)
+        if pd.notna(dm) and pd.notna(sn):
+            condition = f"dur_{int(dm)}_snr_{int(sn)}"
+        else:
+            condition = "unknown"
+
+        results.append({
+            "audio_path": str(audio_path),
+            "ground_truth": ground_truth,
+            "raw_output": result.raw_output,
+            "p_first_token": float(p_first),
+            "prediction": prediction,
+            "correct": is_correct,
+            "condition": condition,
+            "duration_ms": dm,
+            "snr_db": sn,
+        })
+    except Exception as e:
+        print(f"Error: {audio_path}: {e}")
+
+# Calculate metrics
+results_df = pd.DataFrame(results)
+results_df.to_csv(OUTPUT_DIR / "predictions.csv", index=False)
+
+# Overall metrics
+speech = results_df[results_df["ground_truth"] == "SPEECH"]
+nonspeech = results_df[results_df["ground_truth"] == "NONSPEECH"]
+
+speech_acc = speech["correct"].mean() if len(speech) > 0 else 0
+nonspeech_acc = nonspeech["correct"].mean() if len(nonspeech) > 0 else 0
+ba_clip = (speech_acc + nonspeech_acc) / 2
+overall_acc = results_df["correct"].mean()
+
+# Per-duration metrics
+duration_metrics = {}
+for dur in sorted(results_df["duration_ms"].dropna().unique()):
+    dur_df = results_df[results_df["duration_ms"] == dur]
+    dur_speech = dur_df[dur_df["ground_truth"] == "SPEECH"]
+    dur_nonspeech = dur_df[dur_df["ground_truth"] == "NONSPEECH"]
+    dur_speech_acc = dur_speech["correct"].mean() if len(dur_speech) > 0 else 0
+    dur_nonspeech_acc = dur_nonspeech["correct"].mean() if len(dur_nonspeech) > 0 else 0
+    dur_ba = (dur_speech_acc + dur_nonspeech_acc) / 2
+    duration_metrics[int(dur)] = {
+        "ba": float(dur_ba),
+        "speech_acc": float(dur_speech_acc),
+        "nonspeech_acc": float(dur_nonspeech_acc),
+        "n_samples": int(len(dur_df))
+    }
+
+# Per-SNR metrics
+snr_metrics = {}
+for snr in sorted(results_df["snr_db"].dropna().unique()):
+    snr_df = results_df[results_df["snr_db"] == snr]
+    snr_speech = snr_df[snr_df["ground_truth"] == "SPEECH"]
+    snr_nonspeech = snr_df[snr_df["ground_truth"] == "NONSPEECH"]
+    snr_speech_acc = snr_speech["correct"].mean() if len(snr_speech) > 0 else 0
+    snr_nonspeech_acc = snr_nonspeech["correct"].mean() if len(snr_nonspeech) > 0 else 0
+    snr_ba = (snr_speech_acc + snr_nonspeech_acc) / 2
+    snr_metrics[int(snr)] = {
+        "ba": float(snr_ba),
+        "speech_acc": float(snr_speech_acc),
+        "nonspeech_acc": float(snr_nonspeech_acc),
+        "n_samples": int(len(snr_df))
+    }
+
+# Save metrics
+final_metrics = {
+    "mode": MODE,
+    "threshold": THRESHOLD,
+    "prompt": BEST_PROMPT,
+    "lora_path": LORA_PATH,
+    "n_samples": len(results_df),
+    "ba_clip": float(ba_clip),
+    "speech_acc": float(speech_acc),
+    "nonspeech_acc": float(nonspeech_acc),
+    "overall_acc": float(overall_acc),
+    "duration_metrics": duration_metrics,
+    "snr_metrics": snr_metrics,
+}
+
+with open(OUTPUT_DIR / "metrics.json", "w") as f:
+    json.dump(final_metrics, f, indent=2)
+
+# Print summary
+print(f"\n{'='*60}")
+print(f"RESULTS ({MODE.upper()} MODEL, threshold={THRESHOLD})")
+print(f"{'='*60}")
+print(f"Prompt: {BEST_PROMPT}")
+print(f"\nOverall:")
+print(f"  BA_clip:       {ba_clip:.4f} ({ba_clip*100:.2f}%)")
+print(f"  Speech acc:    {speech_acc:.4f} ({speech_acc*100:.2f}%)")
+print(f"  Nonspeech acc: {nonspeech_acc:.4f} ({nonspeech_acc*100:.2f}%)")
+print(f"  Overall acc:   {overall_acc:.4f} ({overall_acc*100:.2f}%)")
+print(f"\nBy duration (ms):")
+for dur in sorted(duration_metrics.keys()):
+    m = duration_metrics[dur]
+    print(f"  {dur:4d}ms: BA={m['ba']:.3f} (S={m['speech_acc']:.2f}, N={m['nonspeech_acc']:.2f}, n={m['n_samples']})")
+print(f"\nBy SNR (dB):")
+for snr in sorted(snr_metrics.keys()):
+    m = snr_metrics[snr]
+    print(f"  {snr:3d}dB: BA={m['ba']:.3f} (S={m['speech_acc']:.2f}, N={m['nonspeech_acc']:.2f}, n={m['n_samples']})")
+
+print(f"\nResults saved to: {OUTPUT_DIR}")
+print(f"{'='*60}")
+PY
+
+EXIT_CODE=$?
+
+echo ""
+echo "============================================"
+echo "EVALUATION COMPLETE"
+echo "============================================"
+echo "Exit code: $EXIT_CODE"
+echo "End time: $(date)"
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "Metrics:"
+    cat "$OUTPUT_DIR/metrics.json" | head -15
+fi
+
+exit $EXIT_CODE
