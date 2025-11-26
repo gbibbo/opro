@@ -1,0 +1,289 @@
+#!/bin/bash
+#SBATCH --job-name=eval_all_splits
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=12:00:00
+#SBATCH --output=logs/eval_all_splits_%j.out
+#SBATCH --error=logs/eval_all_splits_%j.err
+
+# ==============================================================================
+# Evaluate on ALL Splits Dataset (~4000+ samples)
+# ==============================================================================
+#
+# Evaluates on the larger conditions dataset from all splits.
+# Also runs threshold optimization and SNR anomaly analysis.
+#
+# Usage:
+#   sbatch slurm/eval_all_splits.job [base|lora] [threshold]
+#
+# ==============================================================================
+
+set -e
+set -u
+
+MODE=${1:-base}
+THRESHOLD=${2:-0.50}
+
+echo "============================================"
+echo "EVALUATE ON ALL SPLITS DATASET"
+echo "============================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Mode: $MODE"
+echo "Threshold: $THRESHOLD"
+echo "Start time: $(date)"
+echo "============================================"
+
+mkdir -p logs
+
+# Setup environment
+export HF_HOME="/mnt/fast/nobackup/users/$USER/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HOME/hub"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+
+# Activate conda
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
+conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda"; exit 1; }
+echo "Conda environment: $CONDA_DEFAULT_ENV"
+
+# Ensure dependencies
+pip install bitsandbytes peft scikit-learn --quiet 2>/dev/null || true
+
+# GPU info
+nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
+
+# Best prompt from OPRO
+BEST_PROMPT="Is this short clip speech or noise? Your answer should be SPEECH or NON-SPEECH."
+
+# Configure based on mode
+if [ "$MODE" == "base" ]; then
+    OUTPUT_DIR="results/eval_all_splits_base_thresh${THRESHOLD}"
+    LORA_PATH=""
+elif [ "$MODE" == "lora" ]; then
+    LORA_PATH=$(ls -td checkpoints/qwen_lora_*/final 2>/dev/null | head -1)
+    if [ -z "$LORA_PATH" ] || [ ! -d "$LORA_PATH" ]; then
+        echo "ERROR: No LoRA checkpoint found"
+        exit 1
+    fi
+    OUTPUT_DIR="results/eval_all_splits_lora_thresh${THRESHOLD}"
+    echo "Using LoRA: $LORA_PATH"
+else
+    echo "ERROR: Invalid mode: $MODE"
+    exit 1
+fi
+
+mkdir -p "$OUTPUT_DIR"
+
+MANIFEST="data/processed/conditions_all_splits/all_conditions_manifest.parquet"
+
+echo ""
+echo "Configuration:"
+echo "  Manifest: $MANIFEST"
+echo "  Prompt: $BEST_PROMPT"
+echo "  Threshold: $THRESHOLD"
+echo "  Output: $OUTPUT_DIR"
+echo ""
+
+# Check manifest exists
+if [ ! -f "$MANIFEST" ]; then
+    echo "ERROR: Manifest not found: $MANIFEST"
+    echo "Run generate_conditions_all_splits.job first!"
+    exit 1
+fi
+
+# Run evaluation
+python - "$MODE" "$THRESHOLD" "$OUTPUT_DIR" "$LORA_PATH" "$BEST_PROMPT" "$MANIFEST" <<'PY'
+import os
+import sys
+import json
+import pandas as pd
+import numpy as np
+from pathlib import Path
+from tqdm import tqdm
+
+MODE = sys.argv[1]
+THRESHOLD = float(sys.argv[2])
+OUTPUT_DIR = Path(sys.argv[3])
+LORA_PATH = sys.argv[4] if sys.argv[4] else None
+BEST_PROMPT = sys.argv[5]
+MANIFEST = sys.argv[6]
+
+sys.path.insert(0, str(Path.cwd()))
+
+print(f"\n{'='*60}")
+print(f"EVALUATION ON ALL SPLITS ({MODE.upper()})")
+print(f"{'='*60}")
+
+# Load model
+print("\nLoading model...")
+if MODE == "base":
+    from src.qsm.models.qwen_audio import Qwen2AudioClassifier
+    model = Qwen2AudioClassifier(
+        model_name="Qwen/Qwen2-Audio-7B-Instruct",
+        device="cuda",
+        load_in_4bit=True,
+    )
+else:
+    from src.qsm.models.qwen_audio import Qwen2AudioClassifier
+    from peft import PeftModel
+    import torch
+
+    model = Qwen2AudioClassifier(
+        model_name="Qwen/Qwen2-Audio-7B-Instruct",
+        device="cuda",
+        load_in_4bit=True,
+    )
+    model.model = PeftModel.from_pretrained(
+        model.model,
+        LORA_PATH,
+        torch_dtype=torch.float16,
+    )
+    model.model.eval()
+
+model.user_prompt = BEST_PROMPT
+
+# Load manifest
+df = pd.read_parquet(MANIFEST)
+print(f"\nManifest: {len(df)} samples")
+print(f"By split: {df['split'].value_counts().to_dict()}")
+print(f"By variant: {df['variant_type'].value_counts().to_dict()}")
+
+# Resolve paths
+def resolve_path(p):
+    p_str = str(p).replace("\\", "/")
+    if os.path.isfile(p_str):
+        return os.path.abspath(p_str)
+    return p_str
+
+df["audio_resolved"] = df["audio_path"].map(resolve_path)
+exist_mask = df["audio_resolved"].map(lambda x: Path(x).is_file())
+print(f"Files found: {exist_mask.mean():.1%} ({exist_mask.sum()}/{len(df)})")
+
+if exist_mask.mean() < 0.9:
+    print("ERROR: Too many missing files!")
+    sys.exit(1)
+
+df = df[exist_mask].copy()
+
+# Evaluate
+results = []
+for _, row in tqdm(df.iterrows(), total=len(df), desc="Evaluating"):
+    try:
+        result = model.predict(row["audio_resolved"], return_scores=True)
+        p_first = result.probs.get("p_first_token", 0.5) if result.probs else 0.5
+        prediction = "SPEECH" if p_first > THRESHOLD else "NONSPEECH"
+
+        results.append({
+            "clip_id": row.get("clip_id", Path(row["audio_path"]).stem),
+            "audio_path": row["audio_resolved"],
+            "ground_truth": row["ground_truth"],
+            "split": row.get("split", "unknown"),
+            "variant_type": row["variant_type"],
+            "duration_ms": row.get("duration_ms"),
+            "snr_db": row.get("snr_db"),
+            "band_filter": row.get("band_filter"),
+            "T60_bin": row.get("T60_bin"),
+            "p_first_token": float(p_first),
+            "prediction": prediction,
+            "correct": prediction == row["ground_truth"],
+            "raw_output": result.raw_output,
+        })
+    except Exception as e:
+        print(f"Error: {e}")
+
+results_df = pd.DataFrame(results)
+results_df.to_csv(OUTPUT_DIR / "predictions.csv", index=False)
+
+# Calculate metrics
+def calc_ba(subset):
+    speech = subset[subset["ground_truth"] == "SPEECH"]
+    nonspeech = subset[subset["ground_truth"] == "NONSPEECH"]
+    sp_acc = speech["correct"].mean() if len(speech) > 0 else 0
+    ns_acc = nonspeech["correct"].mean() if len(nonspeech) > 0 else 0
+    return (sp_acc + ns_acc) / 2, sp_acc, ns_acc
+
+ba_overall, sp_overall, ns_overall = calc_ba(results_df)
+
+# Per variant type
+variant_metrics = {}
+for vtype in results_df["variant_type"].unique():
+    vdf = results_df[results_df["variant_type"] == vtype]
+    ba, sp, ns = calc_ba(vdf)
+
+    conditions = {}
+    if vtype == "duration":
+        for dur in sorted(vdf["duration_ms"].dropna().unique()):
+            cdf = vdf[vdf["duration_ms"] == dur]
+            cba, csp, cns = calc_ba(cdf)
+            conditions[f"{int(dur)}ms"] = {"ba": cba, "speech_acc": csp, "nonspeech_acc": cns, "n": len(cdf)}
+    elif vtype == "snr":
+        for snr in sorted(vdf["snr_db"].dropna().unique()):
+            cdf = vdf[vdf["snr_db"] == snr]
+            cba, csp, cns = calc_ba(cdf)
+            conditions[f"{int(snr)}dB"] = {"ba": cba, "speech_acc": csp, "nonspeech_acc": cns, "n": len(cdf)}
+    elif vtype == "band":
+        for band in vdf["band_filter"].dropna().unique():
+            cdf = vdf[vdf["band_filter"] == band]
+            cba, csp, cns = calc_ba(cdf)
+            conditions[band] = {"ba": cba, "speech_acc": csp, "nonspeech_acc": cns, "n": len(cdf)}
+    elif vtype == "rir":
+        for t60 in vdf["T60_bin"].dropna().unique():
+            cdf = vdf[vdf["T60_bin"] == t60]
+            cba, csp, cns = calc_ba(cdf)
+            conditions[t60] = {"ba": cba, "speech_acc": csp, "nonspeech_acc": cns, "n": len(cdf)}
+
+    variant_metrics[vtype] = {
+        "ba": ba, "speech_acc": sp, "nonspeech_acc": ns,
+        "n_samples": len(vdf), "conditions": conditions
+    }
+
+metrics = {
+    "mode": MODE,
+    "threshold": THRESHOLD,
+    "n_samples": len(results_df),
+    "overall": {"ba": ba_overall, "speech_acc": sp_overall, "nonspeech_acc": ns_overall},
+    "by_variant_type": variant_metrics,
+}
+
+with open(OUTPUT_DIR / "metrics.json", "w") as f:
+    json.dump(metrics, f, indent=2)
+
+# Print results
+print(f"\n{'='*60}")
+print(f"RESULTS ({MODE.upper()}, threshold={THRESHOLD})")
+print(f"{'='*60}")
+print(f"\nOverall BA: {ba_overall:.4f} ({ba_overall*100:.2f}%)")
+print(f"  Speech acc: {sp_overall:.4f}")
+print(f"  Nonspeech acc: {ns_overall:.4f}")
+
+for vtype, vm in variant_metrics.items():
+    print(f"\n{vtype.upper()} (n={vm['n_samples']}): BA={vm['ba']:.4f}")
+    for cond, cm in sorted(vm["conditions"].items()):
+        print(f"  {cond:15s}: BA={cm['ba']:.3f} (n={cm['n']})")
+
+print(f"\nResults saved to: {OUTPUT_DIR}")
+PY
+
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "Running threshold optimization..."
+    python scripts/optimize_threshold.py --predictions "$OUTPUT_DIR/predictions.csv"
+
+    echo ""
+    echo "Running SNR anomaly analysis..."
+    python scripts/investigate_snr_anomaly.py --predictions "$OUTPUT_DIR/predictions.csv"
+fi
+
+echo ""
+echo "============================================"
+echo "COMPLETE"
+echo "============================================"
+echo "Exit code: $EXIT_CODE"
+echo "End time: $(date)"
+
+exit $EXIT_CODE
