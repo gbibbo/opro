@@ -1,0 +1,399 @@
+#!/bin/bash
+#SBATCH --job-name=threshold_sweep
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/threshold_sweep_%j.out
+#SBATCH --error=logs/threshold_sweep_%j.err
+
+# ==============================================================================
+# Threshold Sweep Analysis for OPRO Best Prompt
+# ==============================================================================
+# This job:
+# 1. Re-evaluates the best prompt saving probability scores
+# 2. Performs threshold sweep to find optimal decision boundary
+# 3. Generates BA vs threshold curve
+# ==============================================================================
+
+set -e
+set -u
+
+echo "============================================"
+echo "THRESHOLD SWEEP ANALYSIS"
+echo "============================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Start time: $(date)"
+echo "============================================"
+
+mkdir -p logs
+
+# Setup environment
+export HF_HOME="/mnt/fast/nobackup/users/$USER/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HOME/hub"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+
+# Activate conda
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
+conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda"; exit 1; }
+echo "Conda environment: $CONDA_DEFAULT_ENV"
+
+# Ensure bitsandbytes
+if ! python -c "import bitsandbytes" 2>/dev/null; then
+    pip install bitsandbytes --no-cache-dir
+fi
+
+# GPU info
+nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
+
+# Symlink for path compatibility
+ln -sfn "$(pwd)/data/processed" processed
+
+# Best prompt from OPRO optimization
+BEST_PROMPT="Is this short clip speech or noise? Your answer should be SPEECH or NON-SPEECH."
+
+# Output directory
+OUTPUT_DIR="results/threshold_analysis"
+mkdir -p "$OUTPUT_DIR"
+
+echo ""
+echo "Configuration:"
+echo "  Test manifest: data/processed/experimental_variants/test_metadata.csv"
+echo "  Best prompt: $BEST_PROMPT"
+echo "  Output: $OUTPUT_DIR"
+echo ""
+
+# Run threshold sweep analysis
+python - <<'PY'
+import os
+import sys
+import json
+import pandas as pd
+import numpy as np
+from pathlib import Path
+from tqdm import tqdm
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+# Add src to path
+sys.path.insert(0, str(Path.cwd()))
+from src.qsm.models.qwen_audio import Qwen2AudioClassifier
+
+# Configuration
+TEST_MANIFEST = "data/processed/experimental_variants/test_metadata.csv"
+BEST_PROMPT = "Is this short clip speech or noise? Your answer should be SPEECH or NON-SPEECH."
+OUTPUT_DIR = Path("results/threshold_analysis")
+
+print(f"\n{'='*60}")
+print("THRESHOLD SWEEP ANALYSIS")
+print(f"{'='*60}")
+print(f"Prompt: {BEST_PROMPT}")
+print(f"Manifest: {TEST_MANIFEST}")
+
+# Load test data
+df = pd.read_csv(TEST_MANIFEST)
+if "ground_truth" in df.columns and "label" not in df.columns:
+    df["label"] = df["ground_truth"]
+
+print(f"Test samples: {len(df)}")
+
+# Resolve paths
+def resolve_path(p):
+    p_str = str(p).replace("\\", "/")
+    if os.path.isabs(p_str) and os.path.isfile(p_str):
+        return p_str
+    if os.path.isfile(p_str):
+        return os.path.abspath(p_str)
+    if p_str.startswith("processed/"):
+        candidate = os.path.join("data", p_str)
+        if os.path.isfile(candidate):
+            return os.path.abspath(candidate)
+    candidate = os.path.join(os.getcwd(), p_str)
+    if os.path.isfile(candidate):
+        return candidate
+    return p_str
+
+df["audio_resolved"] = df["audio_path"].map(resolve_path)
+exist_mask = df["audio_resolved"].map(lambda x: Path(x).is_file())
+print(f"Files found: {exist_mask.mean():.1%} ({exist_mask.sum()}/{len(df)})")
+
+if exist_mask.mean() < 0.95:
+    print("ERROR: Too many missing files!")
+    sys.exit(1)
+
+df = df[exist_mask].copy()
+print(f"Proceeding with {len(df)} samples")
+
+# Load model
+print("\nLoading Qwen2-Audio model...")
+model = Qwen2AudioClassifier(
+    model_name="Qwen/Qwen2-Audio-7B-Instruct",
+    device="cuda",
+    load_in_4bit=True,
+)
+model.user_prompt = BEST_PROMPT
+
+# Evaluate and collect probabilities
+results = []
+for _, row in tqdm(df.iterrows(), total=len(df), desc="Evaluating"):
+    audio_path = row["audio_resolved"]
+    ground_truth = row["label"]
+
+    try:
+        result = model.predict(audio_path, return_scores=True)
+
+        # Get probability for SPEECH class
+        # The model returns probs dict with token probabilities
+        probs = result.probs if hasattr(result, 'probs') and result.probs else {}
+
+        # Try to get SPEECH probability
+        speech_prob = None
+        nonspeech_prob = None
+
+        # Check various keys that might contain the probabilities
+        for key in probs:
+            key_lower = key.lower().strip()
+            if 'speech' in key_lower and 'non' not in key_lower:
+                speech_prob = probs[key]
+            elif 'nonspeech' in key_lower or 'non-speech' in key_lower or 'noise' in key_lower:
+                nonspeech_prob = probs[key]
+
+        # If we have both, use them; otherwise try to infer
+        if speech_prob is not None and nonspeech_prob is not None:
+            # Normalize if needed
+            total = speech_prob + nonspeech_prob
+            if total > 0:
+                speech_prob = speech_prob / total
+            else:
+                speech_prob = 0.5
+        elif speech_prob is not None:
+            pass  # Use as is
+        elif nonspeech_prob is not None:
+            speech_prob = 1.0 - nonspeech_prob
+        else:
+            # Fall back to raw output analysis
+            raw = result.raw_output.upper().strip()
+            if "SPEECH" in raw and "NON" not in raw:
+                speech_prob = 0.9  # High confidence for explicit SPEECH
+            elif "NON" in raw or "NOISE" in raw:
+                speech_prob = 0.1  # Low confidence for explicit NON-SPEECH
+            else:
+                speech_prob = 0.5  # Uncertain
+
+        # Derive condition
+        dm = row.get("duration_ms", None)
+        sn = row.get("snr_db", None)
+        if pd.notna(dm) and pd.notna(sn):
+            condition = f"dur_{int(dm)}_snr_{int(sn)}"
+        else:
+            condition = "unknown"
+
+        results.append({
+            "audio_path": str(audio_path),
+            "ground_truth": ground_truth,
+            "raw_output": result.raw_output,
+            "speech_prob": float(speech_prob) if speech_prob is not None else 0.5,
+            "condition": condition,
+            "duration_ms": dm,
+            "snr_db": sn,
+            "probs_dict": str(probs),  # Store for debugging
+        })
+    except Exception as e:
+        print(f"Error: {audio_path}: {e}")
+
+# Save results with probabilities
+results_df = pd.DataFrame(results)
+results_df.to_csv(OUTPUT_DIR / "test_predictions_with_probs.csv", index=False)
+print(f"\nSaved predictions with probabilities to {OUTPUT_DIR / 'test_predictions_with_probs.csv'}")
+
+# Threshold sweep analysis
+print(f"\n{'='*60}")
+print("THRESHOLD SWEEP ANALYSIS")
+print(f"{'='*60}")
+
+thresholds = np.arange(0.0, 1.01, 0.05)
+threshold_results = []
+
+for thresh in thresholds:
+    # Apply threshold: predict SPEECH if speech_prob >= thresh
+    results_df["prediction"] = results_df["speech_prob"].apply(
+        lambda p: "SPEECH" if p >= thresh else "NONSPEECH"
+    )
+    results_df["correct"] = results_df["prediction"] == results_df["ground_truth"]
+
+    # Calculate metrics
+    speech_mask = results_df["ground_truth"] == "SPEECH"
+    nonspeech_mask = results_df["ground_truth"] == "NONSPEECH"
+
+    speech_acc = results_df.loc[speech_mask, "correct"].mean() if speech_mask.sum() > 0 else 0
+    nonspeech_acc = results_df.loc[nonspeech_mask, "correct"].mean() if nonspeech_mask.sum() > 0 else 0
+    ba = (speech_acc + nonspeech_acc) / 2
+
+    # Also calculate overall accuracy
+    overall_acc = results_df["correct"].mean()
+
+    threshold_results.append({
+        "threshold": thresh,
+        "ba": ba,
+        "speech_acc": speech_acc,
+        "nonspeech_acc": nonspeech_acc,
+        "overall_acc": overall_acc,
+    })
+
+    print(f"  Threshold {thresh:.2f}: BA={ba:.4f} (Speech={speech_acc:.3f}, Nonspeech={nonspeech_acc:.3f})")
+
+# Find optimal threshold
+threshold_df = pd.DataFrame(threshold_results)
+threshold_df.to_csv(OUTPUT_DIR / "threshold_sweep_results.csv", index=False)
+
+best_idx = threshold_df["ba"].idxmax()
+best_thresh = threshold_df.loc[best_idx, "threshold"]
+best_ba = threshold_df.loc[best_idx, "ba"]
+best_speech = threshold_df.loc[best_idx, "speech_acc"]
+best_nonspeech = threshold_df.loc[best_idx, "nonspeech_acc"]
+
+print(f"\n{'='*60}")
+print("OPTIMAL THRESHOLD FOUND")
+print(f"{'='*60}")
+print(f"Optimal threshold: {best_thresh:.2f}")
+print(f"Best BA: {best_ba:.4f} ({best_ba*100:.2f}%)")
+print(f"Speech accuracy: {best_speech:.4f} ({best_speech*100:.2f}%)")
+print(f"Nonspeech accuracy: {best_nonspeech:.4f} ({best_nonspeech*100:.2f}%)")
+
+# Compare with default (0.5) threshold
+default_row = threshold_df[threshold_df["threshold"] == 0.5].iloc[0]
+print(f"\nComparison with default threshold (0.5):")
+print(f"  Default BA: {default_row['ba']:.4f}")
+print(f"  Optimal BA: {best_ba:.4f}")
+print(f"  Improvement: {(best_ba - default_row['ba'])*100:.2f}%")
+
+# Save optimal threshold info
+optimal_info = {
+    "optimal_threshold": float(best_thresh),
+    "best_ba": float(best_ba),
+    "best_speech_acc": float(best_speech),
+    "best_nonspeech_acc": float(best_nonspeech),
+    "default_threshold_ba": float(default_row['ba']),
+    "improvement_over_default": float(best_ba - default_row['ba']),
+    "prompt": BEST_PROMPT,
+}
+with open(OUTPUT_DIR / "optimal_threshold.json", "w") as f:
+    json.dump(optimal_info, f, indent=2)
+
+# Generate plot
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+# Plot 1: BA vs Threshold
+ax1 = axes[0]
+ax1.plot(threshold_df["threshold"], threshold_df["ba"], 'b-', linewidth=2, label='Balanced Accuracy')
+ax1.axvline(x=best_thresh, color='r', linestyle='--', label=f'Optimal ({best_thresh:.2f})')
+ax1.axvline(x=0.5, color='gray', linestyle=':', alpha=0.7, label='Default (0.5)')
+ax1.set_xlabel('Threshold', fontsize=12)
+ax1.set_ylabel('Balanced Accuracy', fontsize=12)
+ax1.set_title('BA vs Decision Threshold', fontsize=14)
+ax1.legend()
+ax1.grid(True, alpha=0.3)
+ax1.set_xlim(0, 1)
+
+# Plot 2: Speech/Nonspeech accuracy vs Threshold
+ax2 = axes[1]
+ax2.plot(threshold_df["threshold"], threshold_df["speech_acc"], 'g-', linewidth=2, label='Speech Accuracy')
+ax2.plot(threshold_df["threshold"], threshold_df["nonspeech_acc"], 'r-', linewidth=2, label='Nonspeech Accuracy')
+ax2.axvline(x=best_thresh, color='purple', linestyle='--', label=f'Optimal ({best_thresh:.2f})')
+ax2.axvline(x=0.5, color='gray', linestyle=':', alpha=0.7, label='Default (0.5)')
+ax2.set_xlabel('Threshold', fontsize=12)
+ax2.set_ylabel('Accuracy', fontsize=12)
+ax2.set_title('Class Accuracies vs Decision Threshold', fontsize=14)
+ax2.legend()
+ax2.grid(True, alpha=0.3)
+ax2.set_xlim(0, 1)
+
+plt.tight_layout()
+plt.savefig(OUTPUT_DIR / "threshold_sweep_plot.png", dpi=150, bbox_inches='tight')
+print(f"\nPlot saved to: {OUTPUT_DIR / 'threshold_sweep_plot.png'}")
+
+# Per-condition analysis at optimal threshold
+print(f"\n{'='*60}")
+print("PER-CONDITION ANALYSIS (at optimal threshold)")
+print(f"{'='*60}")
+
+# Apply optimal threshold
+results_df["prediction"] = results_df["speech_prob"].apply(
+    lambda p: "SPEECH" if p >= best_thresh else "NONSPEECH"
+)
+results_df["correct"] = results_df["prediction"] == results_df["ground_truth"]
+
+condition_metrics = {}
+for cond in results_df["condition"].unique():
+    cond_df = results_df[results_df["condition"] == cond]
+    cond_speech = cond_df[cond_df["ground_truth"] == "SPEECH"]
+    cond_nonspeech = cond_df[cond_df["ground_truth"] == "NONSPEECH"]
+    cond_speech_acc = cond_speech["correct"].mean() if len(cond_speech) > 0 else 0
+    cond_nonspeech_acc = cond_nonspeech["correct"].mean() if len(cond_nonspeech) > 0 else 0
+    cond_ba = (cond_speech_acc + cond_nonspeech_acc) / 2
+    condition_metrics[cond] = {
+        "ba": float(cond_ba),
+        "speech_acc": float(cond_speech_acc),
+        "nonspeech_acc": float(cond_nonspeech_acc),
+        "n_samples": int(len(cond_df)),
+    }
+
+# Print sorted by duration then SNR
+sorted_conditions = sorted(condition_metrics.keys())
+for cond in sorted_conditions:
+    m = condition_metrics[cond]
+    print(f"  {cond}: BA={m['ba']:.3f} (Speech={m['speech_acc']:.3f}, Nonspeech={m['nonspeech_acc']:.3f}, n={m['n_samples']})")
+
+# Save final comprehensive results
+final_results = {
+    "prompt": BEST_PROMPT,
+    "optimal_threshold": float(best_thresh),
+    "metrics_at_optimal": {
+        "ba": float(best_ba),
+        "speech_acc": float(best_speech),
+        "nonspeech_acc": float(best_nonspeech),
+    },
+    "metrics_at_default": {
+        "ba": float(default_row['ba']),
+        "speech_acc": float(default_row['speech_acc']),
+        "nonspeech_acc": float(default_row['nonspeech_acc']),
+    },
+    "improvement": float(best_ba - default_row['ba']),
+    "condition_metrics": condition_metrics,
+    "threshold_sweep": threshold_results,
+}
+
+with open(OUTPUT_DIR / "threshold_analysis_complete.json", "w") as f:
+    json.dump(final_results, f, indent=2)
+
+print(f"\n{'='*60}")
+print("ANALYSIS COMPLETE")
+print(f"{'='*60}")
+print(f"Results saved to: {OUTPUT_DIR}")
+print(f"  - test_predictions_with_probs.csv")
+print(f"  - threshold_sweep_results.csv")
+print(f"  - threshold_sweep_plot.png")
+print(f"  - optimal_threshold.json")
+print(f"  - threshold_analysis_complete.json")
+PY
+
+EXIT_CODE=$?
+
+echo ""
+echo "============================================"
+echo "THRESHOLD SWEEP COMPLETE"
+echo "============================================"
+echo "Exit code: $EXIT_CODE"
+echo "End time: $(date)"
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "Optimal threshold:"
+    cat results/threshold_analysis/optimal_threshold.json
+fi
+
+exit $EXIT_CODE
