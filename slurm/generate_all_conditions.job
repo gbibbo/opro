@@ -1,0 +1,117 @@
+#!/bin/bash
+#SBATCH --job-name=gen_all_cond
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:0
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --time=02:00:00
+#SBATCH --output=logs/gen_all_cond_%j.out
+#SBATCH --error=logs/gen_all_cond_%j.err
+
+# ==============================================================================
+# Generate ALL Condition Variants (Duration, SNR, Band, RIR)
+# ==============================================================================
+#
+# Creates duration, SNR, band-filtered and reverberant versions of base clips.
+# No GPU needed - CPU-only audio processing.
+#
+# Usage:
+#   sbatch slurm/generate_all_conditions.job
+#
+# ==============================================================================
+
+set -e
+set -u
+
+echo "============================================"
+echo "GENERATE ALL CONDITION VARIANTS"
+echo "============================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Start time: $(date)"
+echo "============================================"
+
+mkdir -p logs
+
+# Activate conda
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
+conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda"; exit 1; }
+echo "Conda environment: $CONDA_DEFAULT_ENV"
+
+# Check for base clips
+echo ""
+echo "Checking for base clips..."
+
+# Try different possible locations for base 1000ms clips
+BASE_MANIFEST=""
+for candidate in \
+    "data/processed/base_1000ms/test_base.csv" \
+    "data/processed/base_1000ms/dev_base.csv" \
+    "data/processed/base_1000ms/train_base.csv" \
+    "data/processed/clean_clips/clean_metadata.csv" \
+    "data/processed/normalized_clips/normalized_metadata.csv"; do
+    if [ -f "$candidate" ]; then
+        BASE_MANIFEST="$candidate"
+        echo "Found base manifest: $BASE_MANIFEST"
+        break
+    fi
+done
+
+if [ -z "$BASE_MANIFEST" ]; then
+    echo "ERROR: No base manifest found!"
+    exit 1
+fi
+
+# Count clips
+echo ""
+CLIP_COUNT=$(wc -l < "$BASE_MANIFEST")
+echo "Clips in manifest: $((CLIP_COUNT - 1))"  # -1 for header
+
+# Clean previous generated files
+echo ""
+echo "Cleaning previous generated files..."
+rm -rf data/processed/conditions_final/duration
+rm -rf data/processed/conditions_final/snr
+rm -rf data/processed/conditions_final/band
+rm -rf data/processed/conditions_final/rir
+rm -f data/processed/conditions_final/all_conditions_manifest.*
+
+# Run generation
+echo ""
+echo "Generating ALL condition variants..."
+python scripts/generate_all_conditions.py \
+    --input_manifest "$BASE_MANIFEST" \
+    --output_dir data/processed/conditions_final \
+    --sr 16000
+
+EXIT_CODE=$?
+
+echo ""
+echo "============================================"
+echo "GENERATION COMPLETE"
+echo "============================================"
+echo "Exit code: $EXIT_CODE"
+echo "End time: $(date)"
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "Generated files summary:"
+    echo "  Duration variants: $(ls data/processed/conditions_final/duration/ 2>/dev/null | wc -l)"
+    echo "  SNR variants:      $(ls data/processed/conditions_final/snr/ 2>/dev/null | wc -l)"
+    echo "  Band variants:     $(ls data/processed/conditions_final/band/ 2>/dev/null | wc -l)"
+    echo "  RIR variants:      $(ls data/processed/conditions_final/rir/ 2>/dev/null | wc -l)"
+    echo ""
+    echo "Manifest: data/processed/conditions_final/all_conditions_manifest.parquet"
+
+    # Show manifest stats
+    python - <<'PY'
+import pandas as pd
+df = pd.read_parquet("data/processed/conditions_final/all_conditions_manifest.parquet")
+print(f"\nManifest stats:")
+print(f"  Total samples: {len(df)}")
+print(f"  By variant type: {df['variant_type'].value_counts().to_dict()}")
+print(f"  By label: {df['ground_truth'].value_counts().to_dict()}")
+PY
+fi
+
+exit $EXIT_CODE
