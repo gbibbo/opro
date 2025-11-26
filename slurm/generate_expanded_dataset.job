@@ -1,0 +1,82 @@
+#!/bin/bash
+#SBATCH --job-name=gen_expanded
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:0
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/gen_expanded_%j.out
+#SBATCH --error=logs/gen_expanded_%j.err
+
+# ==============================================================================
+# Generate Expanded Training Dataset
+# ==============================================================================
+#
+# Creates a much larger training dataset using ALL available audio:
+# - 216 VoxConverse clips (SPEECH)
+# - 216 ESC50 clips (NONSPEECH) - balanced
+# - 8 durations × 6 SNRs = 48 augmentations per clip
+# - Total: ~20,736 balanced samples (6x more than before!)
+#
+# ==============================================================================
+
+set -e
+set -u
+
+echo "============================================"
+echo "GENERATE EXPANDED TRAINING DATASET"
+echo "============================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Start time: $(date)"
+echo "============================================"
+
+mkdir -p logs
+
+# Setup environment
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
+conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda"; exit 1; }
+echo "Conda environment: $CONDA_DEFAULT_ENV"
+
+# Check dependencies
+pip install soundfile librosa tqdm pandas --quiet 2>/dev/null || true
+
+# Check available data
+echo ""
+echo "Checking available raw data..."
+echo "VoxConverse:"
+find data/raw/voxconverse -name "*.wav" 2>/dev/null | wc -l
+echo "ESC50:"
+find data/raw/esc50 -name "*.wav" -o -name "*.ogg" 2>/dev/null | wc -l
+find data/raw/ESC-50 -name "*.wav" -o -name "*.ogg" 2>/dev/null | wc -l
+
+# Run generation
+echo ""
+echo "Generating expanded dataset..."
+python scripts/generate_expanded_dataset.py \
+    --data_dir data \
+    --output_dir data/processed/expanded_dataset \
+    --train_ratio 0.7 \
+    --dev_ratio 0.2 \
+    --seed 42 \
+    --workers 16
+
+EXIT_CODE=$?
+
+echo ""
+echo "============================================"
+echo "GENERATION COMPLETE"
+echo "============================================"
+echo "Exit code: $EXIT_CODE"
+echo "End time: $(date)"
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "Dataset summary:"
+    wc -l data/processed/expanded_dataset/*.csv
+    echo ""
+    echo "Sample files:"
+    ls data/processed/expanded_dataset/audio/train/ 2>/dev/null | head -5
+fi
+
+exit $EXIT_CODE

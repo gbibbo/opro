@@ -1,0 +1,125 @@
+#!/bin/bash
+#SBATCH --job-name=opro_improved
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=08:00:00
+#SBATCH --output=logs/opro_improved_%j.out
+#SBATCH --error=logs/opro_improved_%j.err
+
+# ==============================================================================
+# OPRO Improved: Prompt Optimization with More Diversity
+# ==============================================================================
+#
+# Key improvements over previous OPRO runs:
+# - Higher temperature (0.9 vs 0.7) for more exploration
+# - More candidates per iteration (5 vs 3)
+# - Diverse initial seed prompts (10 different styles)
+# - Improved meta-prompt with explicit diversity requirements
+# - Uses expanded dataset for evaluation (~4000 samples stratified)
+# - Runs on BASE model (no LoRA) to find optimal prompts first
+#
+# ==============================================================================
+
+set -euo pipefail
+
+SEED=${1:-42}
+
+echo "============================================"
+echo "OPRO IMPROVED - DIVERSE PROMPT OPTIMIZATION"
+echo "============================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Seed: $SEED"
+echo "Start time: $(date)"
+echo "============================================"
+
+mkdir -p logs
+
+# Setup environment
+export HF_HOME="/mnt/fast/nobackup/users/$USER/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HOME/hub"
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+
+# Activate conda
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
+conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda"; exit 1; }
+echo "Conda environment: $CONDA_DEFAULT_ENV"
+
+# Ensure dependencies
+pip install bitsandbytes peft pandas pyarrow --quiet 2>/dev/null || true
+
+# GPU info
+nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
+
+# Check data - prefer expanded dataset, fall back to conditions
+if [ -f "data/processed/expanded_dataset/dev_metadata.csv" ]; then
+    MANIFEST="data/processed/expanded_dataset/dev_metadata.csv"
+    MANIFEST_TYPE="csv"
+    echo "Using expanded dataset for evaluation"
+elif [ -f "data/processed/conditions_final/conditions_manifest_split.parquet" ]; then
+    MANIFEST="data/processed/conditions_final/conditions_manifest_split.parquet"
+    MANIFEST_TYPE="parquet"
+    echo "Using conditions manifest for evaluation"
+else
+    echo "ERROR: No evaluation data found!"
+    exit 1
+fi
+
+echo ""
+echo "Configuration:"
+echo "  Manifest: $MANIFEST"
+echo "  Model: BASE (no LoRA)"
+echo "  Optimizer LLM: Qwen/Qwen2.5-7B-Instruct"
+echo "  Temperature: 0.9 (high diversity)"
+echo "  Candidates/iter: 5"
+echo "  Iterations: 30"
+echo "  Eval samples: 800 (stratified)"
+echo "  Seed: $SEED"
+echo ""
+
+# Output directory
+OUTPUT_DIR="results/opro_improved_base_seed${SEED}"
+mkdir -p "$OUTPUT_DIR"
+
+# Run OPRO with improved settings
+python scripts/opro_classic_optimize.py \
+    --manifest "$MANIFEST" \
+    --split dev \
+    --output_dir "$OUTPUT_DIR" \
+    --no_lora \
+    --optimizer_llm "Qwen/Qwen2.5-7B-Instruct" \
+    --optimizer_temperature 0.9 \
+    --num_iterations 30 \
+    --candidates_per_iter 5 \
+    --top_k 15 \
+    --early_stopping 7 \
+    --max_eval_samples 800 \
+    --sample_strategy stratified \
+    --initial_prompts_json config/initial_prompts_diverse.json \
+    --seed $SEED
+
+EXIT_CODE=$?
+
+echo ""
+echo "============================================"
+echo "OPRO OPTIMIZATION COMPLETE"
+echo "============================================"
+echo "Exit code: $EXIT_CODE"
+echo "End time: $(date)"
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "Results saved to: $OUTPUT_DIR"
+    echo ""
+    echo "Best prompt:"
+    cat "$OUTPUT_DIR/best_prompt.txt" 2>/dev/null || echo "(not found)"
+    echo ""
+    echo "Best metrics:"
+    cat "$OUTPUT_DIR/best_metrics.json" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "(not found)"
+fi
+
+exit $EXIT_CODE

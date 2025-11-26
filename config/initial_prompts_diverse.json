@@ -1,0 +1,22 @@
+{
+  "description": "Diverse initial prompts for OPRO optimization covering different styles",
+  "prompts": [
+    "Does this audio contain human speech? Reply with ONLY one word: SPEECH or NON-SPEECH.",
+    "Is this short clip speech or noise? Your answer should be SPEECH or NON-SPEECH.",
+    "Choose one:\nA) SPEECH (human voice)\nB) NONSPEECH (music/noise/silence/animals)\n\nAnswer with A or B ONLY.",
+    "Classify this audio: SPEECH or NON-SPEECH?",
+    "Listen carefully. Is there a human voice? Answer: SPEECH or NON-SPEECH.",
+    "Audio classification task. Even if the audio is noisy, short, or degraded, determine if human speech is present. Reply: SPEECH or NON-SPEECH.",
+    "This audio may be very short or contain background noise. Is there human speech? SPEECH or NON-SPEECH.",
+    "Detect if this contains spoken words. Output only: SPEECH or NON-SPEECH.",
+    "Binary classification: Does this audio have human voice content? SPEECH / NON-SPEECH",
+    "Focus on detecting any human vocal activity, even if brief or partially masked by noise. Answer SPEECH or NON-SPEECH."
+  ],
+  "style_categories": {
+    "question": [0, 1, 4],
+    "command": [3, 7],
+    "choice_ab": [2],
+    "robust_instructions": [5, 6, 9],
+    "minimal": [8]
+  }
+}

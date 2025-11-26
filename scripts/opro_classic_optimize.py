@@ -340,6 +340,17 @@ class OPROClassicOptimizer:
             history_str += f"\n{i}. Reward={candidate.reward:.4f} | BA_clip={candidate.ba_clip:.3f} | BA_cond={candidate.ba_conditions:.3f}\n"
             history_str += f'   "{clean_prompt}"\n'
 
+        # Build diverse style examples
+        style_examples = """
+STYLE EXAMPLES (use these as inspiration for DIVERSITY):
+- Question: "Does this audio contain human speech? Answer: SPEECH or NON-SPEECH."
+- Command: "Classify this audio. Output: SPEECH or NON-SPEECH."
+- A/B Choice: "Choose: A) SPEECH B) NON-SPEECH. Answer with A or B."
+- Robust: "Even if noisy or brief, is there human voice? SPEECH or NON-SPEECH."
+- Minimal: "SPEECH or NON-SPEECH?"
+- Contextual: "This may be degraded audio. Detect speech presence: SPEECH / NON-SPEECH."
+"""
+
         meta_prompt = f"""TASK: Optimize prompts for audio classification (Qwen2-Audio-7B-Instruct).
 The model receives audio and must classify it as SPEECH or NON-SPEECH.
 
@@ -363,29 +374,31 @@ Reward: {f"{self.baseline_reward:.4f}" if self.baseline_reward is not None else 
 CURRENT ITERATION: {iteration}
 
 TOP-{self.top_k} PROMPTS:{history_str}
-
-INSTRUCTIONS:
-Generate {self.candidates_per_iter} NEW prompt candidates that:
-1. Are clear and concise (target <150 chars, absolute max 300 chars)
-2. Encourage robust detection on SHORT and NOISY clips
-3. Use simple, direct language (model is instruction-tuned)
-4. Build on insights from top prompts above
-5. Explore semantic variations: question style, command style, description style
-6. Consider emphasizing: brevity detection, noise robustness, voice/speech keywords
+{style_examples}
+CRITICAL - DIVERSITY REQUIREMENTS:
+Each of your {self.candidates_per_iter} prompts MUST be SUBSTANTIALLY DIFFERENT from each other:
+- Use DIFFERENT sentence structures (question vs command vs statement)
+- Use DIFFERENT key phrases (speech/voice/spoken words/human voice/vocal)
+- Use DIFFERENT output formats (SPEECH/NON-SPEECH vs A/B vs Yes/No mapped)
+- At least one prompt should be very short (<50 chars)
+- At least one prompt should emphasize noise/degradation robustness
+- DO NOT just rephrase the same idea - explore genuinely different approaches
 
 CONSTRAINTS:
 - Each prompt must be COMPLETE and STANDALONE (no placeholders)
-- Must include instruction to respond with ONLY "SPEECH" or "NON-SPEECH" (or similar binary format)
-- Avoid overly complex or multi-step instructions
-- Prompts must be plain text (NO special tokens, NO markup)
+- Must specify binary output format (SPEECH/NON-SPEECH, A/B, etc.)
+- Avoid overly complex multi-step instructions
+- Plain text only (NO special tokens, NO markup)
+- Length: 20-300 characters
 
-OUTPUT FORMAT (exactly {self.candidates_per_iter} prompts, one per line):
+OUTPUT FORMAT (exactly {self.candidates_per_iter} prompts):
 PROMPT_1: <your complete prompt here>
 PROMPT_2: <your complete prompt here>
 PROMPT_3: <your complete prompt here>
-{f"PROMPT_{self.candidates_per_iter}: <your complete prompt here>" if self.candidates_per_iter > 3 else ""}
+PROMPT_4: <your complete prompt here>
+PROMPT_5: <your complete prompt here>
 
-Generate the prompts now:"""
+Generate {self.candidates_per_iter} DIVERSE prompts now:"""
 
         return meta_prompt
 
@@ -1085,7 +1098,8 @@ def main():
     parser.add_argument(
         "--optimizer_temperature",
         type=float,
-        default=0.7,
+        default=0.9,
+        help="Sampling temperature (higher = more diversity). Default 0.9.",
     )
 
     # OPRO configuration
@@ -1097,7 +1111,8 @@ def main():
     parser.add_argument(
         "--candidates_per_iter",
         type=int,
-        default=3,
+        default=5,
+        help="Number of prompt candidates per iteration (more = more exploration). Default 5.",
     )
     parser.add_argument(
         "--top_k",
