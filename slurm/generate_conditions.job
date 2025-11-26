@@ -45,10 +45,11 @@ echo "Checking for base clips..."
 # Try different possible locations for base 1000ms clips
 BASE_MANIFEST=""
 for candidate in \
+    "data/processed/base_1000ms/test_base.csv" \
+    "data/processed/base_1000ms/dev_base.csv" \
+    "data/processed/base_1000ms/train_base.csv" \
     "data/processed/clean_clips/clean_metadata.csv" \
-    "data/processed/normalized_clips/normalized_metadata.csv" \
-    "data/processed/base_1000ms/metadata.csv" \
-    "data/processed/grouped_split/train_metadata.csv"; do
+    "data/processed/normalized_clips/normalized_metadata.csv"; do
     if [ -f "$candidate" ]; then
         BASE_MANIFEST="$candidate"
         echo "Found base manifest: $BASE_MANIFEST"
@@ -59,10 +60,11 @@ done
 if [ -z "$BASE_MANIFEST" ]; then
     echo "ERROR: No base manifest found!"
     echo "Tried:"
+    echo "  - data/processed/base_1000ms/test_base.csv"
+    echo "  - data/processed/base_1000ms/dev_base.csv"
+    echo "  - data/processed/base_1000ms/train_base.csv"
     echo "  - data/processed/clean_clips/clean_metadata.csv"
     echo "  - data/processed/normalized_clips/normalized_metadata.csv"
-    echo "  - data/processed/base_1000ms/metadata.csv"
-    echo "  - data/processed/grouped_split/train_metadata.csv"
     exit 1
 fi
 

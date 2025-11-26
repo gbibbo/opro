@@ -285,6 +285,10 @@ def main():
             lambda x: Path(x).stem.replace("_1000ms", "")
         )
 
+    # Normalize label column
+    if "ground_truth" in base_df.columns and "label" not in base_df.columns:
+        base_df["label"] = base_df["ground_truth"]
+
     print(f"Loaded {len(base_df)} base clips")
 
     # Filter by max_clips if set
@@ -294,9 +298,15 @@ def main():
 
     # Resolve audio paths
     def resolve_path(p):
-        p = Path(p)
+        p_str = str(p).replace("\\", "/")
+        p = Path(p_str)
         if p.is_file():
             return str(p)
+        # Try with data/ prefix (for paths starting with "processed/")
+        if p_str.startswith("processed/"):
+            candidate = Path("data") / p_str
+            if candidate.is_file():
+                return str(candidate)
         # Try with data/ prefix
         candidate = Path("data") / p
         if candidate.is_file():
