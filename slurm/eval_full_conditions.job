@@ -1,0 +1,365 @@
+#!/bin/bash
+#SBATCH --job-name=eval_full_cond
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=06:00:00
+#SBATCH --output=logs/eval_full_cond_%j.out
+#SBATCH --error=logs/eval_full_cond_%j.err
+
+# ==============================================================================
+# Full Conditions Evaluation (Duration, SNR, Band Filters, Reverb)
+# ==============================================================================
+#
+# Evaluates on the complete conditions manifest including:
+#   - Duration variants (20-1000ms)
+#   - SNR variants (-10 to +20 dB)
+#   - Band filters (hp300, lp3400, telephony)
+#   - Reverb/RIR (T60: 0.0-0.4, 0.4-0.8, 0.8-1.5)
+#
+# Usage:
+#   sbatch slurm/eval_full_conditions.job [base|lora] [threshold]
+#
+# Examples:
+#   sbatch slurm/eval_full_conditions.job base 0.50
+#   sbatch slurm/eval_full_conditions.job lora 0.60
+#
+# ==============================================================================
+
+set -e
+set -u
+
+# Parse arguments
+MODE=${1:-base}
+THRESHOLD=${2:-0.50}
+
+echo "============================================"
+echo "FULL CONDITIONS EVALUATION"
+echo "============================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Mode: $MODE"
+echo "Threshold: $THRESHOLD"
+echo "Start time: $(date)"
+echo "============================================"
+
+mkdir -p logs
+
+# Setup environment
+export HF_HOME="/mnt/fast/nobackup/users/$USER/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HOME/hub"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+
+# Activate conda
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
+conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda"; exit 1; }
+echo "Conda environment: $CONDA_DEFAULT_ENV"
+
+# Ensure dependencies
+if ! python -c "import bitsandbytes" 2>/dev/null; then
+    pip install bitsandbytes --no-cache-dir
+fi
+if ! python -c "import peft" 2>/dev/null; then
+    pip install peft --no-cache-dir
+fi
+
+# GPU info
+nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
+
+# Best prompt from OPRO
+BEST_PROMPT="Is this short clip speech or noise? Your answer should be SPEECH or NON-SPEECH."
+
+# Configure based on mode
+if [ "$MODE" == "base" ]; then
+    OUTPUT_DIR="results/eval_full_conditions_base_thresh${THRESHOLD}"
+    LORA_PATH=""
+elif [ "$MODE" == "lora" ]; then
+    # Find most recent LoRA checkpoint
+    LORA_PATH=$(ls -td checkpoints/qwen_lora_*/final 2>/dev/null | head -1)
+    if [ -z "$LORA_PATH" ] || [ ! -d "$LORA_PATH" ]; then
+        echo "ERROR: No LoRA checkpoint found in checkpoints/qwen_lora_*/final"
+        exit 1
+    fi
+    OUTPUT_DIR="results/eval_full_conditions_lora_thresh${THRESHOLD}"
+    echo "Using LoRA checkpoint: $LORA_PATH"
+else
+    echo "ERROR: Invalid mode: $MODE (use 'base' or 'lora')"
+    exit 1
+fi
+
+mkdir -p "$OUTPUT_DIR"
+
+echo ""
+echo "Configuration:"
+echo "  Manifest: data/processed/conditions_final/conditions_manifest_filtered.parquet"
+echo "  Best prompt: $BEST_PROMPT"
+echo "  Threshold: $THRESHOLD"
+echo "  Mode: $MODE"
+echo "  Output: $OUTPUT_DIR"
+echo ""
+
+# Run evaluation
+python - "$MODE" "$THRESHOLD" "$OUTPUT_DIR" "$LORA_PATH" "$BEST_PROMPT" <<'PY'
+import os
+import sys
+import json
+import pandas as pd
+import numpy as np
+from pathlib import Path
+from tqdm import tqdm
+
+# Parse arguments
+MODE = sys.argv[1]
+THRESHOLD = float(sys.argv[2])
+OUTPUT_DIR = Path(sys.argv[3])
+LORA_PATH = sys.argv[4] if sys.argv[4] else None
+BEST_PROMPT = sys.argv[5]
+
+# Add src to path
+sys.path.insert(0, str(Path.cwd()))
+
+print(f"\n{'='*60}")
+print(f"FULL CONDITIONS EVALUATION")
+print(f"{'='*60}")
+print(f"Mode: {MODE}")
+print(f"Threshold: {THRESHOLD}")
+print(f"Prompt: {BEST_PROMPT}")
+
+# Load model
+print("\nLoading model...")
+if MODE == "base":
+    from src.qsm.models.qwen_audio import Qwen2AudioClassifier
+    model = Qwen2AudioClassifier(
+        model_name="Qwen/Qwen2-Audio-7B-Instruct",
+        device="cuda",
+        load_in_4bit=True,
+    )
+else:  # lora
+    from src.qsm.models.qwen_audio import Qwen2AudioClassifier
+    from peft import PeftModel
+    import torch
+
+    print(f"Loading base model...")
+    model = Qwen2AudioClassifier(
+        model_name="Qwen/Qwen2-Audio-7B-Instruct",
+        device="cuda",
+        load_in_4bit=True,
+    )
+
+    print(f"Loading LoRA adapter from: {LORA_PATH}")
+    model.model = PeftModel.from_pretrained(
+        model.model,
+        LORA_PATH,
+        torch_dtype=torch.float16,
+    )
+    model.model.eval()
+    print("LoRA adapter loaded!")
+
+model.user_prompt = BEST_PROMPT
+
+# Load full conditions manifest
+MANIFEST = "data/processed/conditions_final/conditions_manifest_filtered.parquet"
+df = pd.read_parquet(MANIFEST)
+
+# Normalize labels
+if "ground_truth" in df.columns:
+    df["label"] = df["ground_truth"]
+elif "label" in df.columns:
+    # Normalize NON-SPEECH -> NONSPEECH
+    df["label"] = df["label"].str.replace("NON-SPEECH", "NONSPEECH")
+
+print(f"\nManifest loaded: {len(df)} samples")
+print(f"Variant types: {df['variant_type'].value_counts().to_dict()}")
+
+# Resolve paths
+def resolve_path(p):
+    p_str = str(p).replace("\\", "/")
+    if os.path.isabs(p_str) and os.path.isfile(p_str):
+        return p_str
+    if os.path.isfile(p_str):
+        return os.path.abspath(p_str)
+    # Try with data/ prefix
+    if p_str.startswith("processed/"):
+        candidate = os.path.join("data", p_str)
+        if os.path.isfile(candidate):
+            return os.path.abspath(candidate)
+    # Try from cwd
+    candidate = os.path.join(os.getcwd(), p_str)
+    if os.path.isfile(candidate):
+        return candidate
+    return p_str
+
+df["audio_resolved"] = df["audio_path"].map(resolve_path)
+exist_mask = df["audio_resolved"].map(lambda x: Path(x).is_file())
+print(f"Files found: {exist_mask.mean():.1%} ({exist_mask.sum()}/{len(df)})")
+
+if exist_mask.mean() < 0.95:
+    print("ERROR: Too many missing files!")
+    print("Missing files (first 5):")
+    for p in df[~exist_mask]["audio_path"].head(5):
+        print(f"  - {p}")
+    sys.exit(1)
+
+df = df[exist_mask].copy()
+print(f"Proceeding with {len(df)} samples")
+
+# Evaluate
+results = []
+for _, row in tqdm(df.iterrows(), total=len(df), desc="Evaluating"):
+    audio_path = row["audio_resolved"]
+    ground_truth = row["label"]
+    variant_type = row.get("variant_type", "unknown")
+
+    try:
+        result = model.predict(audio_path, return_scores=True)
+
+        # Get p_first_token
+        p_first = result.probs.get("p_first_token", 0.5) if result.probs else 0.5
+
+        # Apply threshold: p_first_token > threshold -> SPEECH
+        prediction = "SPEECH" if p_first > THRESHOLD else "NONSPEECH"
+        is_correct = (prediction == ground_truth)
+
+        # Get condition info based on variant type
+        if variant_type == "duration":
+            condition = f"dur_{int(row.get('duration_ms', 0))}ms"
+            condition_value = row.get("duration_ms", None)
+        elif variant_type == "snr":
+            condition = f"snr_{int(row.get('snr_db', 0))}dB"
+            condition_value = row.get("snr_db", None)
+        elif variant_type == "band":
+            condition = f"filter_{row.get('band_filter', 'unk')}"
+            condition_value = row.get("band_filter", None)
+        elif variant_type == "rir":
+            t60_bin = row.get("T60_bin", "unk")
+            condition = f"reverb_{t60_bin}"
+            condition_value = row.get("T60", None)
+        else:
+            condition = "unknown"
+            condition_value = None
+
+        results.append({
+            "audio_path": str(audio_path),
+            "ground_truth": ground_truth,
+            "raw_output": result.raw_output,
+            "p_first_token": float(p_first),
+            "prediction": prediction,
+            "correct": is_correct,
+            "variant_type": variant_type,
+            "condition": condition,
+            "condition_value": condition_value,
+            "duration_ms": row.get("duration_ms", None),
+            "snr_db": row.get("snr_db", None),
+            "band_filter": row.get("band_filter", None),
+            "T60": row.get("T60", None),
+            "T60_bin": row.get("T60_bin", None),
+        })
+    except Exception as e:
+        print(f"Error: {audio_path}: {e}")
+
+# Save predictions
+results_df = pd.DataFrame(results)
+results_df.to_csv(OUTPUT_DIR / "predictions.csv", index=False)
+
+# Calculate metrics by variant type
+def calc_ba(df_subset):
+    speech = df_subset[df_subset["ground_truth"] == "SPEECH"]
+    nonspeech = df_subset[df_subset["ground_truth"] == "NONSPEECH"]
+    sp_acc = speech["correct"].mean() if len(speech) > 0 else 0
+    ns_acc = nonspeech["correct"].mean() if len(nonspeech) > 0 else 0
+    return (sp_acc + ns_acc) / 2, sp_acc, ns_acc
+
+# Overall metrics
+ba_overall, sp_overall, ns_overall = calc_ba(results_df)
+
+# Per variant type
+variant_metrics = {}
+for vtype in results_df["variant_type"].unique():
+    vtype_df = results_df[results_df["variant_type"] == vtype]
+    ba, sp, ns = calc_ba(vtype_df)
+
+    # Per condition within variant type
+    condition_metrics = {}
+    for cond in sorted(vtype_df["condition"].unique()):
+        cond_df = vtype_df[vtype_df["condition"] == cond]
+        cba, csp, cns = calc_ba(cond_df)
+        condition_metrics[cond] = {
+            "ba": float(cba),
+            "speech_acc": float(csp),
+            "nonspeech_acc": float(cns),
+            "n_samples": int(len(cond_df)),
+            "n_speech": int(len(cond_df[cond_df["ground_truth"] == "SPEECH"])),
+            "n_nonspeech": int(len(cond_df[cond_df["ground_truth"] == "NONSPEECH"])),
+        }
+
+    variant_metrics[vtype] = {
+        "ba": float(ba),
+        "speech_acc": float(sp),
+        "nonspeech_acc": float(ns),
+        "n_samples": int(len(vtype_df)),
+        "conditions": condition_metrics,
+    }
+
+# Save metrics
+final_metrics = {
+    "mode": MODE,
+    "threshold": THRESHOLD,
+    "prompt": BEST_PROMPT,
+    "lora_path": LORA_PATH,
+    "n_samples": len(results_df),
+    "overall": {
+        "ba": float(ba_overall),
+        "speech_acc": float(sp_overall),
+        "nonspeech_acc": float(ns_overall),
+    },
+    "by_variant_type": variant_metrics,
+}
+
+with open(OUTPUT_DIR / "metrics.json", "w") as f:
+    json.dump(final_metrics, f, indent=2)
+
+# Print summary
+print(f"\n{'='*60}")
+print(f"RESULTS ({MODE.upper()} MODEL, threshold={THRESHOLD})")
+print(f"{'='*60}")
+print(f"\nOverall:")
+print(f"  BA:            {ba_overall:.4f} ({ba_overall*100:.2f}%)")
+print(f"  Speech acc:    {sp_overall:.4f} ({sp_overall*100:.2f}%)")
+print(f"  Nonspeech acc: {ns_overall:.4f} ({ns_overall*100:.2f}%)")
+
+print(f"\n--- By Variant Type ---")
+for vtype, vm in variant_metrics.items():
+    print(f"\n{vtype.upper()} (n={vm['n_samples']}):")
+    print(f"  Overall BA: {vm['ba']:.4f} ({vm['ba']*100:.2f}%)")
+    print(f"  Conditions:")
+    for cond, cm in sorted(vm["conditions"].items()):
+        print(f"    {cond:20s}: BA={cm['ba']:.3f} (S={cm['speech_acc']:.2f}, N={cm['nonspeech_acc']:.2f}, n={cm['n_samples']})")
+
+print(f"\nResults saved to: {OUTPUT_DIR}")
+print(f"{'='*60}")
+PY
+
+EXIT_CODE=$?
+
+echo ""
+echo "============================================"
+echo "EVALUATION COMPLETE"
+echo "============================================"
+echo "Exit code: $EXIT_CODE"
+echo "End time: $(date)"
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "Summary metrics:"
+    cat "$OUTPUT_DIR/metrics.json" | python -c "
+import sys, json
+m = json.load(sys.stdin)
+print(f\"Overall BA: {m['overall']['ba']*100:.2f}%\")
+for vt, vm in m['by_variant_type'].items():
+    print(f\"  {vt}: BA={vm['ba']*100:.2f}% (n={vm['n_samples']})\")
+"
+fi
+
+exit $EXIT_CODE
