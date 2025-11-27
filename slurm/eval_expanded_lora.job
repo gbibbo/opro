@@ -1,0 +1,155 @@
+#!/bin/bash
+#SBATCH --job-name=eval_expanded
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/eval_expanded_%j.out
+#SBATCH --error=logs/eval_expanded_%j.err
+
+# ==============================================================================
+# Evaluate LoRA trained on expanded dataset
+# ==============================================================================
+#
+# Tests the new LoRA model (trained on 14,496 samples) against:
+# 1. The original best prompt: "Is this short clip speech or noise?..."
+# 2. The new OPRO prompt: "Assess: Audio contains human speech? A) YES B) NO"
+#
+# ==============================================================================
+
+set -euo pipefail
+
+echo "============================================"
+echo "EVALUATE EXPANDED LORA MODEL"
+echo "============================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Start time: $(date)"
+echo "============================================"
+
+mkdir -p logs
+
+# Setup environment
+export HF_HOME="/mnt/fast/nobackup/users/$USER/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HOME/hub"
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+
+# Activate conda
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
+conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda"; exit 1; }
+echo "Conda environment: $CONDA_DEFAULT_ENV"
+
+# Ensure dependencies
+pip install bitsandbytes peft --quiet 2>/dev/null || true
+
+# GPU info
+nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
+
+# Paths
+LORA_PATH="checkpoints/qwen_lora_expanded_seed42/final"
+DEV_CSV="data/processed/expanded_dataset/dev_metadata.csv"
+OUTPUT_DIR="results/eval_expanded_lora"
+
+mkdir -p "$OUTPUT_DIR"
+
+# Check model exists
+if [ ! -f "$LORA_PATH/adapter_model.safetensors" ]; then
+    echo "ERROR: LoRA model not found at $LORA_PATH"
+    exit 1
+fi
+
+echo ""
+echo "Configuration:"
+echo "  LoRA: $LORA_PATH"
+echo "  Dev CSV: $DEV_CSV"
+echo "  Output: $OUTPUT_DIR"
+echo ""
+
+# Create prompt files
+echo "Is this short clip speech or noise? Your answer should be SPEECH or NON-SPEECH." > "$OUTPUT_DIR/prompt_original.txt"
+echo "Assess: Audio contains human speech? A) YES B) NO" > "$OUTPUT_DIR/prompt_opro.txt"
+
+# Test with original best prompt
+echo "============================================"
+echo "TEST 1: Expanded LoRA + Original prompt"
+echo "============================================"
+
+python scripts/evaluate_with_generation.py \
+    --test_csv "$DEV_CSV" \
+    --checkpoint "$LORA_PATH" \
+    --prompt_file "$OUTPUT_DIR/prompt_original.txt" \
+    --output_csv "$OUTPUT_DIR/eval_lora_original.csv"
+
+echo ""
+echo "============================================"
+echo "TEST 2: Expanded LoRA + New OPRO prompt"
+echo "============================================"
+
+python scripts/evaluate_with_generation.py \
+    --test_csv "$DEV_CSV" \
+    --checkpoint "$LORA_PATH" \
+    --prompt_file "$OUTPUT_DIR/prompt_opro.txt" \
+    --output_csv "$OUTPUT_DIR/eval_lora_opro.csv"
+
+echo ""
+echo "============================================"
+echo "TEST 3: BASE model + New OPRO prompt"
+echo "============================================"
+
+python scripts/evaluate_with_generation.py \
+    --test_csv "$DEV_CSV" \
+    --no-lora \
+    --prompt_file "$OUTPUT_DIR/prompt_opro.txt" \
+    --output_csv "$OUTPUT_DIR/eval_base_opro.csv"
+
+echo ""
+echo "============================================"
+echo "TEST 4: Original LoRA (seed42) + Original prompt"
+echo "============================================"
+
+ORIG_LORA="checkpoints/qwen_lora_seed42/final"
+if [ -d "$ORIG_LORA" ]; then
+    python scripts/evaluate_with_generation.py \
+        --test_csv "$DEV_CSV" \
+        --checkpoint "$ORIG_LORA" \
+        --prompt_file "$OUTPUT_DIR/prompt_original.txt" \
+        --output_csv "$OUTPUT_DIR/eval_orig_lora.csv"
+else
+    echo "Original LoRA not found, skipping..."
+fi
+
+echo ""
+echo "============================================"
+echo "EVALUATION COMPLETE"
+echo "============================================"
+echo "Results saved to: $OUTPUT_DIR"
+echo "End time: $(date)"
+
+# Print summary
+echo ""
+echo "=== SUMMARY ==="
+for f in "$OUTPUT_DIR"/eval_*.csv; do
+    if [ -f "$f" ]; then
+        name=$(basename "$f" .csv)
+        # Calculate BA from CSV predictions
+        ba=$(python3 -c "
+import pandas as pd
+df = pd.read_csv('$f')
+if 'correct' in df.columns:
+    # Calculate balanced accuracy
+    speech = df[df['ground_truth'] == 'SPEECH']['correct'].mean() if len(df[df['ground_truth'] == 'SPEECH']) > 0 else 0
+    nonspeech = df[df['ground_truth'] == 'NONSPEECH']['correct'].mean() if len(df[df['ground_truth'] == 'NONSPEECH']) > 0 else 0
+    ba = (speech + nonspeech) / 2
+    print(f'{ba:.4f}')
+else:
+    print('N/A')
+" 2>/dev/null || echo "N/A")
+        echo "  $name: BA=$ba"
+    fi
+done
+
+echo ""
+ls -la "$OUTPUT_DIR/"
