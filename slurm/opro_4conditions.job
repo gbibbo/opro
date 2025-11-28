@@ -1,0 +1,136 @@
+#!/bin/bash
+#SBATCH --job-name=opro_4cond
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=08:00:00
+#SBATCH --output=logs/opro_4cond_%j.out
+#SBATCH --error=logs/opro_4cond_%j.err
+
+# ==============================================================================
+# OPRO Prompt Optimization with 4-Condition Dataset
+# ==============================================================================
+#
+# Runs prompt optimization using the expanded dataset with all 4 conditions.
+# This ensures the optimized prompt works well across:
+# - Different durations (20-1000ms)
+# - Different SNR levels (-10 to +20dB)
+# - Different band filters (telephony, lp3400, hp300)
+# - Different reverb levels (T60 0.2-1.1s)
+#
+# Uses stratified sampling to ensure balanced evaluation across conditions.
+#
+# ==============================================================================
+
+set -euo pipefail
+
+SEED=${1:-42}
+
+echo "============================================"
+echo "OPRO WITH 4-CONDITION DATASET"
+echo "============================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Seed: $SEED"
+echo "Start time: $(date)"
+echo "============================================"
+
+mkdir -p logs
+
+# Setup environment
+export HF_HOME="/mnt/fast/nobackup/users/$USER/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HOME/hub"
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+
+# Activate conda
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
+conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda"; exit 1; }
+echo "Conda environment: $CONDA_DEFAULT_ENV"
+
+# Ensure dependencies
+pip install bitsandbytes peft pandas pyarrow --quiet 2>/dev/null || true
+
+# GPU info
+nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
+
+# Check data
+MANIFEST="data/processed/expanded_4conditions/dev_metadata.csv"
+if [ ! -f "$MANIFEST" ]; then
+    echo "ERROR: Dev manifest not found at $MANIFEST"
+    echo "Please run generate_full_conditions_dataset.job first"
+    exit 1
+fi
+
+# Count samples by condition type
+echo ""
+echo "Dev set composition:"
+python3 -c "
+import pandas as pd
+df = pd.read_csv('$MANIFEST')
+print(f'  Total samples: {len(df)}')
+print(f'  SPEECH: {len(df[df[\"label\"]==\"SPEECH\"])}')
+print(f'  NONSPEECH: {len(df[df[\"label\"]==\"NONSPEECH\"])}')
+if 'condition_type' in df.columns:
+    print(f'  By condition type:')
+    for ct, count in df['condition_type'].value_counts().items():
+        print(f'    {ct}: {count}')
+"
+
+# Output directory
+OUTPUT_DIR="results/opro_4conditions_base_seed${SEED}"
+mkdir -p "$OUTPUT_DIR"
+
+echo ""
+echo "Configuration:"
+echo "  Manifest: $MANIFEST"
+echo "  Model: BASE (no LoRA)"
+echo "  Optimizer LLM: Qwen/Qwen2.5-7B-Instruct"
+echo "  Temperature: 0.9 (high diversity)"
+echo "  Candidates/iter: 5"
+echo "  Iterations: 30"
+echo "  Eval samples: 1000 (stratified)"
+echo "  Seed: $SEED"
+echo "  Output: $OUTPUT_DIR"
+echo ""
+
+# Run OPRO
+python scripts/opro_classic_optimize.py \
+    --manifest "$MANIFEST" \
+    --split dev \
+    --output_dir "$OUTPUT_DIR" \
+    --no_lora \
+    --optimizer_llm "Qwen/Qwen2.5-7B-Instruct" \
+    --optimizer_temperature 0.9 \
+    --num_iterations 30 \
+    --candidates_per_iter 5 \
+    --top_k 15 \
+    --early_stopping 7 \
+    --max_eval_samples 1000 \
+    --sample_strategy stratified \
+    --initial_prompts_json config/initial_prompts_diverse.json \
+    --seed $SEED
+
+EXIT_CODE=$?
+
+echo ""
+echo "============================================"
+echo "OPRO OPTIMIZATION COMPLETE"
+echo "============================================"
+echo "Exit code: $EXIT_CODE"
+echo "End time: $(date)"
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "Results saved to: $OUTPUT_DIR"
+    echo ""
+    echo "Best prompt:"
+    cat "$OUTPUT_DIR/best_prompt.txt" 2>/dev/null || echo "(not found)"
+    echo ""
+    echo "Best metrics:"
+    cat "$OUTPUT_DIR/best_metrics.json" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "(not found)"
+fi
+
+exit $EXIT_CODE

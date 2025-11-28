@@ -1,0 +1,121 @@
+#!/bin/bash
+#SBATCH --job-name=gen_4cond
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:0
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=64G
+#SBATCH --time=06:00:00
+#SBATCH --output=logs/gen_4cond_%j.out
+#SBATCH --error=logs/gen_4cond_%j.err
+
+# ==============================================================================
+# Generate Expanded Dataset with 4 Psychometric Conditions
+# ==============================================================================
+#
+# Generates dataset variants with:
+# - 8 Durations: 20, 40, 60, 80, 100, 200, 500, 1000ms
+# - 6 SNRs: -10, -5, 0, 5, 10, 20dB
+# - 3 Band Filters: telephony, lp3400, hp300
+# - 3 T60/Reverb levels: 0.2s, 0.6s, 1.1s
+#
+# Expected output: ~23,000 samples (54 variants per base clip)
+#
+# ==============================================================================
+
+set -euo pipefail
+
+echo "============================================"
+echo "GENERATE 4-CONDITION DATASET"
+echo "============================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Start time: $(date)"
+echo "============================================"
+
+mkdir -p logs
+
+# Activate conda
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
+conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda"; exit 1; }
+echo "Conda environment: $CONDA_DEFAULT_ENV"
+
+# Ensure dependencies
+pip install soundfile librosa scipy tqdm pandas --quiet 2>/dev/null || true
+
+# Check source data exists - either preprocessed or raw
+if [ -f "data/processed/base_1000ms/train_base.csv" ]; then
+    echo "Using preprocessed base_1000ms clips"
+    echo ""
+    echo "Base clips found:"
+    for split in train dev test; do
+        csv="data/processed/base_1000ms/${split}_base.csv"
+        if [ -f "$csv" ]; then
+            count=$(($(wc -l < "$csv") - 1))
+            echo "  ${split}: ${count} clips"
+        fi
+    done
+elif [ -d "data/raw/voxconverse" ] && [ -d "data/raw/esc50" ]; then
+    echo "Using raw audio files directly"
+    echo ""
+    VOX_COUNT=$(find data/raw/voxconverse -name "*.wav" | wc -l)
+    ESC_COUNT=$(find data/raw/esc50 -name "*.wav" | wc -l)
+    echo "Raw files found:"
+    echo "  VoxConverse (SPEECH): $VOX_COUNT"
+    echo "  ESC-50 (NONSPEECH): $ESC_COUNT"
+else
+    echo "ERROR: No audio data found!"
+    echo "Need either data/processed/base_1000ms/ or data/raw/{voxconverse,esc50}/"
+    exit 1
+fi
+echo ""
+
+# Output directory
+OUTPUT_DIR="data/processed/expanded_4conditions"
+mkdir -p "$OUTPUT_DIR"
+
+echo "Configuration:"
+echo "  Input: data/processed/base_1000ms"
+echo "  Output: $OUTPUT_DIR"
+echo "  Workers: 16"
+echo "  Train/Dev/Test: 70%/20%/10%"
+echo ""
+
+# Run generation script
+python scripts/generate_expanded_dataset_4conditions.py \
+    --data_dir data \
+    --output_dir "$OUTPUT_DIR" \
+    --train_ratio 0.7 \
+    --dev_ratio 0.2 \
+    --seed 42 \
+    --workers 16
+
+EXIT_CODE=$?
+
+echo ""
+echo "============================================"
+echo "DATASET GENERATION COMPLETE"
+echo "============================================"
+echo "Exit code: $EXIT_CODE"
+echo "End time: $(date)"
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo ""
+    echo "Output files:"
+    ls -la "$OUTPUT_DIR"/*.csv 2>/dev/null || echo "(no CSV files)"
+
+    echo ""
+    echo "Sample counts:"
+    for split in train dev test; do
+        csv="$OUTPUT_DIR/${split}_metadata.csv"
+        if [ -f "$csv" ]; then
+            count=$(wc -l < "$csv")
+            echo "  $split: $((count - 1)) samples"
+        fi
+    done
+
+    echo ""
+    echo "Disk usage:"
+    du -sh "$OUTPUT_DIR"
+fi
+
+exit $EXIT_CODE

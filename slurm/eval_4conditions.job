@@ -1,0 +1,319 @@
+#!/bin/bash
+#SBATCH --job-name=eval_4cond
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=06:00:00
+#SBATCH --output=logs/eval_4cond_%j.out
+#SBATCH --error=logs/eval_4cond_%j.err
+
+# ==============================================================================
+# Comprehensive Evaluation with 4 Psychometric Conditions
+# ==============================================================================
+#
+# Evaluates all 4 model×prompt combinations:
+# 1. BASE model + Original prompt
+# 2. BASE model + OPRO prompt
+# 3. LoRA 4-cond + Original prompt
+# 4. LoRA 4-cond + OPRO prompt
+#
+# Reports metrics broken down by:
+# - Global BA
+# - Per-class (SPEECH, NONSPEECH)
+# - Per Duration (8 levels)
+# - Per SNR (6 levels)
+# - Per Band Filter (3 types)
+# - Per T60/Reverb (3 levels)
+#
+# ==============================================================================
+
+set -euo pipefail
+
+echo "============================================"
+echo "COMPREHENSIVE 4-CONDITION EVALUATION"
+echo "============================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Start time: $(date)"
+echo "============================================"
+
+mkdir -p logs
+
+# Setup environment
+export HF_HOME="/mnt/fast/nobackup/users/$USER/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HOME/hub"
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+
+# Activate conda
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
+conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda"; exit 1; }
+echo "Conda environment: $CONDA_DEFAULT_ENV"
+
+# Ensure dependencies
+pip install bitsandbytes peft pandas scikit-learn --quiet 2>/dev/null || true
+
+# GPU info
+nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
+
+# Paths
+TEST_CSV="data/processed/expanded_4conditions/test_metadata.csv"
+LORA_4COND="checkpoints/qwen_lora_4conditions_seed42/final"
+OPRO_PROMPT_DIR="results/opro_4conditions_base_seed42"
+OUTPUT_DIR="results/eval_4conditions"
+
+mkdir -p "$OUTPUT_DIR"
+
+# Check data exists
+if [ ! -f "$TEST_CSV" ]; then
+    echo "ERROR: Test data not found at $TEST_CSV"
+    exit 1
+fi
+
+# Create prompt files
+ORIG_PROMPT="Is this short clip speech or noise? Your answer should be SPEECH or NON-SPEECH."
+echo "$ORIG_PROMPT" > "$OUTPUT_DIR/prompt_original.txt"
+
+# Get OPRO prompt if available
+if [ -f "$OPRO_PROMPT_DIR/best_prompt.txt" ]; then
+    cp "$OPRO_PROMPT_DIR/best_prompt.txt" "$OUTPUT_DIR/prompt_opro.txt"
+    OPRO_PROMPT=$(cat "$OUTPUT_DIR/prompt_opro.txt")
+else
+    # Fallback to previous best OPRO prompt
+    OPRO_PROMPT="Assess: Audio contains human speech? A) YES B) NO"
+    echo "$OPRO_PROMPT" > "$OUTPUT_DIR/prompt_opro.txt"
+    echo "Warning: OPRO prompt not found, using fallback"
+fi
+
+echo ""
+echo "Configuration:"
+echo "  Test CSV: $TEST_CSV"
+echo "  LoRA 4-cond: $LORA_4COND"
+echo "  Output: $OUTPUT_DIR"
+echo ""
+echo "Prompts:"
+echo "  Original: $ORIG_PROMPT"
+echo "  OPRO: $OPRO_PROMPT"
+echo ""
+
+# Test count
+TEST_COUNT=$(wc -l < "$TEST_CSV")
+echo "Test samples: $((TEST_COUNT - 1))"
+echo ""
+
+# ==============================================================================
+# TEST 1: BASE model + Original prompt
+# ==============================================================================
+echo "============================================"
+echo "TEST 1: BASE + Original prompt"
+echo "============================================"
+
+python scripts/evaluate_with_generation.py \
+    --test_csv "$TEST_CSV" \
+    --no-lora \
+    --prompt_file "$OUTPUT_DIR/prompt_original.txt" \
+    --output_csv "$OUTPUT_DIR/eval_base_original.csv"
+
+# ==============================================================================
+# TEST 2: BASE model + OPRO prompt
+# ==============================================================================
+echo ""
+echo "============================================"
+echo "TEST 2: BASE + OPRO prompt"
+echo "============================================"
+
+python scripts/evaluate_with_generation.py \
+    --test_csv "$TEST_CSV" \
+    --no-lora \
+    --prompt_file "$OUTPUT_DIR/prompt_opro.txt" \
+    --output_csv "$OUTPUT_DIR/eval_base_opro.csv"
+
+# ==============================================================================
+# TEST 3: LoRA 4-cond + Original prompt
+# ==============================================================================
+echo ""
+echo "============================================"
+echo "TEST 3: LoRA 4-cond + Original prompt"
+echo "============================================"
+
+if [ -d "$LORA_4COND" ]; then
+    python scripts/evaluate_with_generation.py \
+        --test_csv "$TEST_CSV" \
+        --checkpoint "$LORA_4COND" \
+        --prompt_file "$OUTPUT_DIR/prompt_original.txt" \
+        --output_csv "$OUTPUT_DIR/eval_lora4_original.csv"
+else
+    echo "WARNING: LoRA 4-cond model not found at $LORA_4COND, skipping..."
+fi
+
+# ==============================================================================
+# TEST 4: LoRA 4-cond + OPRO prompt
+# ==============================================================================
+echo ""
+echo "============================================"
+echo "TEST 4: LoRA 4-cond + OPRO prompt"
+echo "============================================"
+
+if [ -d "$LORA_4COND" ]; then
+    python scripts/evaluate_with_generation.py \
+        --test_csv "$TEST_CSV" \
+        --checkpoint "$LORA_4COND" \
+        --prompt_file "$OUTPUT_DIR/prompt_opro.txt" \
+        --output_csv "$OUTPUT_DIR/eval_lora4_opro.csv"
+else
+    echo "WARNING: LoRA 4-cond model not found, skipping..."
+fi
+
+# ==============================================================================
+# GENERATE COMPREHENSIVE RESULTS TABLE
+# ==============================================================================
+echo ""
+echo "============================================"
+echo "GENERATING RESULTS TABLE"
+echo "============================================"
+
+python3 << 'PYTHON_SCRIPT'
+import pandas as pd
+import json
+from pathlib import Path
+
+output_dir = Path("results/eval_4conditions")
+
+def calculate_ba(df):
+    """Calculate balanced accuracy."""
+    if 'correct' not in df.columns:
+        return None
+    speech = df[df['ground_truth'] == 'SPEECH']['correct'].mean() if len(df[df['ground_truth'] == 'SPEECH']) > 0 else 0
+    nonspeech = df[df['ground_truth'] == 'NONSPEECH']['correct'].mean() if len(df[df['ground_truth'] == 'NONSPEECH']) > 0 else 0
+    return (speech + nonspeech) / 2
+
+def get_metrics_by_condition(df, condition_type, value_col):
+    """Get BA for each value of a specific condition type."""
+    # Filter to only this condition type
+    subset_df = df[df['condition_type'] == condition_type] if 'condition_type' in df.columns else df
+
+    if value_col not in subset_df.columns:
+        return {}
+
+    metrics = {}
+    for val in subset_df[value_col].dropna().unique():
+        subset = subset_df[subset_df[value_col] == val]
+        ba = calculate_ba(subset)
+        if ba is not None:
+            metrics[str(val)] = round(ba * 100, 2)
+    return metrics
+
+results = {}
+eval_files = {
+    "BASE + Original": "eval_base_original.csv",
+    "BASE + OPRO": "eval_base_opro.csv",
+    "LoRA-4cond + Original": "eval_lora4_original.csv",
+    "LoRA-4cond + OPRO": "eval_lora4_opro.csv"
+}
+
+for name, filename in eval_files.items():
+    filepath = output_dir / filename
+    if not filepath.exists():
+        print(f"Skipping {name}: file not found")
+        continue
+
+    df = pd.read_csv(filepath)
+    ba = calculate_ba(df)
+
+    if ba is None:
+        print(f"Skipping {name}: could not calculate BA")
+        continue
+
+    # Get normal baseline BA (duration=1000ms, is_normal=True)
+    normal_df = df[df['is_normal'] == True] if 'is_normal' in df.columns else df[df['duration_ms'] == 1000]
+    normal_ba = calculate_ba(normal_df) if len(normal_df) > 0 else None
+
+    results[name] = {
+        "global_ba": round(ba * 100, 2),
+        "normal_ba": round(normal_ba * 100, 2) if normal_ba else None,
+        "speech_acc": round(df[df['ground_truth'] == 'SPEECH']['correct'].mean() * 100, 2) if len(df[df['ground_truth'] == 'SPEECH']) > 0 else 0,
+        "nonspeech_acc": round(df[df['ground_truth'] == 'NONSPEECH']['correct'].mean() * 100, 2) if len(df[df['ground_truth'] == 'NONSPEECH']) > 0 else 0,
+        "duration_metrics": get_metrics_by_condition(df, 'duration', 'duration_ms'),
+        "snr_metrics": get_metrics_by_condition(df, 'snr', 'snr_db'),
+        "filter_metrics": get_metrics_by_condition(df, 'filter', 'band_filter'),
+        "reverb_metrics": get_metrics_by_condition(df, 'reverb', 't60_bin')
+    }
+
+# Save results
+with open(output_dir / "comprehensive_results.json", "w") as f:
+    json.dump(results, f, indent=2)
+
+# Print summary table
+print("\n" + "=" * 80)
+print("COMPREHENSIVE RESULTS - 4 PSYCHOMETRIC CONDITIONS (20 INDEPENDENT)")
+print("=" * 80)
+
+print("\n### Global Metrics ###")
+print(f"{'Configuration':<25} {'BA':<10} {'Normal':<10} {'Speech':<10} {'Nonspeech':<10}")
+print("-" * 65)
+for name, metrics in results.items():
+    normal = f"{metrics['normal_ba']:.2f}" if metrics['normal_ba'] else "N/A"
+    print(f"{name:<25} {metrics['global_ba']:<10.2f} {normal:<10} {metrics['speech_acc']:<10.2f} {metrics['nonspeech_acc']:<10.2f}")
+
+print("\n### By Duration (ms) - clean, no filter, no reverb ###")
+durations = ['20', '40', '60', '80', '100', '200', '500', '1000']
+header = f"{'Configuration':<25}" + "".join([f"{d:>8}" for d in durations])
+print(header)
+print("-" * (25 + 8 * len(durations)))
+for name, metrics in results.items():
+    row = f"{name:<25}"
+    for d in durations:
+        val = metrics['duration_metrics'].get(d, '-')
+        row += f"{val:>8}" if val != '-' else f"{'':>8}"
+    print(row)
+
+print("\n### By SNR (dB) - 1000ms, no filter, no reverb ###")
+snrs = ['-10.0', '-5.0', '0.0', '5.0', '10.0', '20.0']
+header = f"{'Configuration':<25}" + "".join([f"{s:>8}" for s in snrs])
+print(header)
+print("-" * (25 + 8 * len(snrs)))
+for name, metrics in results.items():
+    row = f"{name:<25}"
+    for s in snrs:
+        val = metrics['snr_metrics'].get(s, '-')
+        row += f"{val:>8}" if val != '-' else f"{'':>8}"
+    print(row)
+
+print("\n### By Band Filter - 1000ms, clean, no reverb ###")
+filters = ['telephony', 'lp3400', 'hp300']
+header = f"{'Configuration':<25}" + "".join([f"{f:>12}" for f in filters])
+print(header)
+print("-" * (25 + 12 * len(filters)))
+for name, metrics in results.items():
+    row = f"{name:<25}"
+    for f in filters:
+        val = metrics['filter_metrics'].get(f, '-')
+        row += f"{val:>12}" if val != '-' else f"{'':>12}"
+    print(row)
+
+print("\n### By Reverb/T60 - 1000ms, clean, no filter ###")
+t60s = ['T60_0.0-0.4', 'T60_0.4-0.8', 'T60_0.8-1.5']
+header = f"{'Configuration':<25}" + "".join([f"{t:>14}" for t in t60s])
+print(header)
+print("-" * (25 + 14 * len(t60s)))
+for name, metrics in results.items():
+    row = f"{name:<25}"
+    for t in t60s:
+        val = metrics['reverb_metrics'].get(t, '-')
+        row += f"{val:>14}" if val != '-' else f"{'':>14}"
+    print(row)
+
+print("\n" + "=" * 80)
+print(f"Results saved to: {output_dir / 'comprehensive_results.json'}")
+PYTHON_SCRIPT
+
+echo ""
+echo "============================================"
+echo "EVALUATION COMPLETE"
+echo "============================================"
+echo "End time: $(date)"
+echo ""
+echo "Output files:"
+ls -la "$OUTPUT_DIR/"
