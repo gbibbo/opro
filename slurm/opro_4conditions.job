@@ -70,9 +70,10 @@ echo "Dev set composition:"
 python3 -c "
 import pandas as pd
 df = pd.read_csv('$MANIFEST')
+label_col = 'ground_truth' if 'ground_truth' in df.columns else 'label'
 print(f'  Total samples: {len(df)}')
-print(f'  SPEECH: {len(df[df[\"label\"]==\"SPEECH\"])}')
-print(f'  NONSPEECH: {len(df[df[\"label\"]==\"NONSPEECH\"])}')
+print(f'  SPEECH: {len(df[df[label_col]==\"SPEECH\"])}')
+print(f'  NONSPEECH: {len(df[df[label_col]==\"NONSPEECH\"])}')
 if 'condition_type' in df.columns:
     print(f'  By condition type:')
     for ct, count in df['condition_type'].value_counts().items():

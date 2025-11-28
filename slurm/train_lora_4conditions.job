@@ -99,10 +99,7 @@ python scripts/finetune_qwen_audio.py \
     --gradient_accumulation_steps 16 \
     --learning_rate 5e-5 \
     --lora_r 16 \
-    --lora_alpha 32 \
-    --warmup_ratio 0.1 \
-    --logging_steps 50 \
-    --save_strategy epoch
+    --lora_alpha 32
 
 EXIT_CODE=$?
 
