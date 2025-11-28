@@ -61,7 +61,8 @@ nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
 # Paths
 TEST_CSV="data/processed/expanded_4conditions/test_metadata.csv"
 LORA_4COND="checkpoints/qwen_lora_4conditions_seed42/final"
-OPRO_PROMPT_DIR="results/opro_4conditions_base_seed42"
+OPRO_BASE_DIR="results/opro_4conditions_base_seed42"
+OPRO_LORA_DIR="results/opro_4conditions_lora_seed42"
 OUTPUT_DIR="results/eval_4conditions"
 
 mkdir -p "$OUTPUT_DIR"
@@ -76,15 +77,24 @@ fi
 ORIG_PROMPT="Is this short clip speech or noise? Your answer should be SPEECH or NON-SPEECH."
 echo "$ORIG_PROMPT" > "$OUTPUT_DIR/prompt_original.txt"
 
-# Get OPRO prompt if available
-if [ -f "$OPRO_PROMPT_DIR/best_prompt.txt" ]; then
-    cp "$OPRO_PROMPT_DIR/best_prompt.txt" "$OUTPUT_DIR/prompt_opro.txt"
-    OPRO_PROMPT=$(cat "$OUTPUT_DIR/prompt_opro.txt")
+# Get OPRO prompt for BASE model
+if [ -f "$OPRO_BASE_DIR/best_prompt.txt" ]; then
+    cp "$OPRO_BASE_DIR/best_prompt.txt" "$OUTPUT_DIR/prompt_opro_base.txt"
+    OPRO_BASE_PROMPT=$(cat "$OUTPUT_DIR/prompt_opro_base.txt")
 else
-    # Fallback to previous best OPRO prompt
-    OPRO_PROMPT="Assess: Audio contains human speech? A) YES B) NO"
-    echo "$OPRO_PROMPT" > "$OUTPUT_DIR/prompt_opro.txt"
-    echo "Warning: OPRO prompt not found, using fallback"
+    OPRO_BASE_PROMPT="Assess: Audio contains human speech? A) YES B) NO"
+    echo "$OPRO_BASE_PROMPT" > "$OUTPUT_DIR/prompt_opro_base.txt"
+    echo "Warning: OPRO-BASE prompt not found, using fallback"
+fi
+
+# Get OPRO prompt for LoRA model
+if [ -f "$OPRO_LORA_DIR/best_prompt.txt" ]; then
+    cp "$OPRO_LORA_DIR/best_prompt.txt" "$OUTPUT_DIR/prompt_opro_lora.txt"
+    OPRO_LORA_PROMPT=$(cat "$OUTPUT_DIR/prompt_opro_lora.txt")
+else
+    OPRO_LORA_PROMPT="Assess: Audio contains human speech? A) YES B) NO"
+    echo "$OPRO_LORA_PROMPT" > "$OUTPUT_DIR/prompt_opro_lora.txt"
+    echo "Warning: OPRO-LORA prompt not found, using fallback"
 fi
 
 echo ""
@@ -95,7 +105,8 @@ echo "  Output: $OUTPUT_DIR"
 echo ""
 echo "Prompts:"
 echo "  Original: $ORIG_PROMPT"
-echo "  OPRO: $OPRO_PROMPT"
+echo "  OPRO-BASE: $OPRO_BASE_PROMPT"
+echo "  OPRO-LORA: $OPRO_LORA_PROMPT"
 echo ""
 
 # Test count
@@ -117,17 +128,17 @@ python scripts/evaluate_with_generation.py \
     --output_csv "$OUTPUT_DIR/eval_base_original.csv"
 
 # ==============================================================================
-# TEST 2: BASE model + OPRO prompt
+# TEST 2: BASE model + OPRO-BASE prompt
 # ==============================================================================
 echo ""
 echo "============================================"
-echo "TEST 2: BASE + OPRO prompt"
+echo "TEST 2: BASE + OPRO-BASE prompt"
 echo "============================================"
 
 python scripts/evaluate_with_generation.py \
     --test_csv "$TEST_CSV" \
     --no-lora \
-    --prompt_file "$OUTPUT_DIR/prompt_opro.txt" \
+    --prompt_file "$OUTPUT_DIR/prompt_opro_base.txt" \
     --output_csv "$OUTPUT_DIR/eval_base_opro.csv"
 
 # ==============================================================================
@@ -149,18 +160,18 @@ else
 fi
 
 # ==============================================================================
-# TEST 4: LoRA 4-cond + OPRO prompt
+# TEST 4: LoRA 4-cond + OPRO-LORA prompt
 # ==============================================================================
 echo ""
 echo "============================================"
-echo "TEST 4: LoRA 4-cond + OPRO prompt"
+echo "TEST 4: LoRA 4-cond + OPRO-LORA prompt"
 echo "============================================"
 
 if [ -d "$LORA_4COND" ]; then
     python scripts/evaluate_with_generation.py \
         --test_csv "$TEST_CSV" \
         --checkpoint "$LORA_4COND" \
-        --prompt_file "$OUTPUT_DIR/prompt_opro.txt" \
+        --prompt_file "$OUTPUT_DIR/prompt_opro_lora.txt" \
         --output_csv "$OUTPUT_DIR/eval_lora4_opro.csv"
 else
     echo "WARNING: LoRA 4-cond model not found, skipping..."
