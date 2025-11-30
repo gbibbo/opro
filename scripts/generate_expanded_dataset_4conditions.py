@@ -319,12 +319,15 @@ def process_single_clip(args):
     return results
 
 
-def load_base_clips_from_csv(data_dir: Path):
+def load_base_clips_from_csv(data_dir: Path, base_clips_dir: Path = None):
     """Load base clips from preprocessed CSV manifests.
 
     Uses the existing base_1000ms structure with train/dev/test splits.
     """
-    base_dir = data_dir / "processed" / "base_1000ms"
+    if base_clips_dir is not None:
+        base_dir = Path(base_clips_dir)
+    else:
+        base_dir = data_dir / "processed" / "base_1000ms"
 
     splits = {'train': [], 'dev': [], 'test': []}
 
@@ -354,15 +357,18 @@ def load_base_clips_from_csv(data_dir: Path):
     return splits
 
 
-def discover_audio_files(data_dir: Path):
+def discover_audio_files(data_dir: Path, base_clips_dir: Path = None):
     """Discover all available audio files and categorize them.
 
     First tries to use preprocessed base_1000ms clips, then falls back to raw files.
     """
     # Try preprocessed base clips first
-    base_dir = data_dir / "processed" / "base_1000ms"
+    if base_clips_dir is not None:
+        base_dir = Path(base_clips_dir)
+    else:
+        base_dir = data_dir / "processed" / "base_1000ms"
     if (base_dir / "train_base.csv").exists():
-        print("Using preprocessed base_1000ms clips")
+        print(f"Using preprocessed base clips from: {base_dir}")
         return None, None  # Signal to use load_base_clips_from_csv instead
 
     # Fall back to discovering raw files
@@ -403,6 +409,8 @@ def discover_audio_files(data_dir: Path):
 def main():
     parser = argparse.ArgumentParser(description="Generate expanded dataset with 4 conditions")
     parser.add_argument("--data_dir", type=str, default="data", help="Data directory")
+    parser.add_argument("--base_clips_dir", type=str, default=None,
+                        help="Base clips directory (default: data/processed/base_1000ms)")
     parser.add_argument("--output_dir", type=str, default="data/processed/expanded_4conditions",
                         help="Output directory")
     parser.add_argument("--max_clips_per_class", type=int, default=None,
@@ -438,12 +446,13 @@ def main():
     print("=" * 80)
 
     # Check for preprocessed base clips
-    speech_files, nonspeech_files = discover_audio_files(data_dir)
+    base_clips_dir = Path(args.base_clips_dir) if args.base_clips_dir else None
+    speech_files, nonspeech_files = discover_audio_files(data_dir, base_clips_dir)
 
     if speech_files is None:
         # Use preprocessed base_1000ms clips with predefined splits
-        print("\nUsing preprocessed base_1000ms clips with existing splits")
-        base_splits = load_base_clips_from_csv(data_dir)
+        print("\nUsing preprocessed base clips with existing splits")
+        base_splits = load_base_clips_from_csv(data_dir, base_clips_dir)
 
         if not any(base_splits.values()):
             print("ERROR: Could not load base clips!")

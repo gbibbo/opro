@@ -1,0 +1,136 @@
+#!/bin/bash
+#SBATCH --job-name=gen_verified
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/gen_verified_%j.out
+#SBATCH --error=logs/gen_verified_%j.err
+
+# ==============================================================================
+# Generate Verified Dataset with Silero VAD
+# ==============================================================================
+#
+# Step 1: Generate base 1000ms clips verified with Silero VAD (>80% speech)
+# Step 2: Generate expanded 4-conditions dataset from verified clips
+#
+# ==============================================================================
+
+set -euo pipefail
+
+echo "============================================"
+echo "GENERATE VERIFIED DATASET"
+echo "============================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Start time: $(date)"
+echo "============================================"
+
+mkdir -p logs
+
+# Setup environment
+export HF_HOME="/mnt/fast/nobackup/users/$USER/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HOME/hub"
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+
+# Activate conda
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
+conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda"; exit 1; }
+echo "Conda environment: $CONDA_DEFAULT_ENV"
+
+# Ensure dependencies
+pip install soundfile librosa scipy pandas torch --quiet 2>/dev/null || true
+
+# GPU info
+nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
+
+# ==============================================================================
+# STEP 1: Generate verified base clips
+# ==============================================================================
+echo ""
+echo "============================================"
+echo "STEP 1: Generate verified base clips"
+echo "============================================"
+
+BASE_OUTPUT="data/processed/base_1000ms_verified"
+
+python scripts/generate_base_clips_verified.py \
+    --data_dir data \
+    --output_dir "$BASE_OUTPUT" \
+    --target_speech_clips 200 \
+    --target_nonspeech_clips 200 \
+    --clips_per_source 5 \
+    --seed 42
+
+echo ""
+echo "Base clips generated:"
+ls -la "$BASE_OUTPUT"/*.csv 2>/dev/null || echo "No CSV files found"
+
+# Count clips
+if [ -f "$BASE_OUTPUT/train_base.csv" ]; then
+    echo "Train: $(wc -l < "$BASE_OUTPUT/train_base.csv") lines"
+    echo "Dev: $(wc -l < "$BASE_OUTPUT/dev_base.csv") lines"
+    echo "Test: $(wc -l < "$BASE_OUTPUT/test_base.csv") lines"
+fi
+
+# ==============================================================================
+# STEP 2: Generate expanded 4-conditions dataset
+# ==============================================================================
+echo ""
+echo "============================================"
+echo "STEP 2: Generate expanded 4-conditions dataset"
+echo "============================================"
+
+EXPANDED_OUTPUT="data/processed/expanded_4conditions_verified"
+
+python scripts/generate_expanded_dataset_4conditions.py \
+    --data_dir data \
+    --base_clips_dir "$BASE_OUTPUT" \
+    --output_dir "$EXPANDED_OUTPUT" \
+    --workers 8 \
+    --seed 42
+
+echo ""
+echo "Expanded dataset generated:"
+ls -la "$EXPANDED_OUTPUT"/*.csv 2>/dev/null || echo "No CSV files found"
+
+# Count samples
+if [ -f "$EXPANDED_OUTPUT/train_metadata.csv" ]; then
+    echo ""
+    echo "Sample counts:"
+    echo "  Train: $(wc -l < "$EXPANDED_OUTPUT/train_metadata.csv") lines"
+    echo "  Dev: $(wc -l < "$EXPANDED_OUTPUT/dev_metadata.csv") lines"
+    echo "  Test: $(wc -l < "$EXPANDED_OUTPUT/test_metadata.csv") lines"
+fi
+
+# ==============================================================================
+# VERIFICATION
+# ==============================================================================
+echo ""
+echo "============================================"
+echo "VERIFICATION: Check speech ratios in test set"
+echo "============================================"
+
+python3 -c "
+import pandas as pd
+df = pd.read_csv('$EXPANDED_OUTPUT/test_metadata.csv')
+print(f'Total test samples: {len(df)}')
+print(f'  SPEECH: {len(df[df[\"ground_truth\"]==\"SPEECH\"])}')
+print(f'  NONSPEECH: {len(df[df[\"ground_truth\"]==\"NONSPEECH\"])}')
+print(f'By condition_type:')
+for ct in df['condition_type'].unique():
+    print(f'  {ct}: {len(df[df[\"condition_type\"]==ct])}')
+"
+
+echo ""
+echo "============================================"
+echo "GENERATION COMPLETE"
+echo "============================================"
+echo "End time: $(date)"
+echo ""
+echo "Output directories:"
+echo "  Base clips: $BASE_OUTPUT"
+echo "  Expanded dataset: $EXPANDED_OUTPUT"
