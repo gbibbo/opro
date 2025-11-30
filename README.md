@@ -506,5 +506,123 @@ MIT License - See LICENSE file for details
 
 ---
 
-*Last Updated: 2025-10-22*
-*Version: 1.0 (Post-SPRINT 2)*
+## 🔬 New: 4-Conditions Psychoacoustic Dataset & OPRO Pipeline
+
+### Overview
+
+We developed a comprehensive evaluation framework that tests speech detection robustness across 4 psychoacoustic dimensions:
+
+1. **Duration** (8 levels): 20, 40, 60, 80, 100, 200, 500, 1000ms
+2. **SNR** (6 levels): -10, -5, 0, 5, 10, 20 dB (babble noise)
+3. **Band Filter** (3 types): telephony (300-3400Hz), lowpass (3400Hz), highpass (300Hz)
+4. **Reverb** (3 T60 levels): 0.2s, 0.6s, 1.1s reverberation time
+
+### Dataset Generation Pipeline
+
+```bash
+# Step 1: Generate verified base clips (>80% speech via Silero VAD)
+python scripts/generate_base_clips_verified.py \
+    --data_dir data \
+    --output_dir data/processed/base_1000ms_verified \
+    --target_speech_clips 200 \
+    --target_nonspeech_clips 200
+
+# Step 2: Expand with 4 psychoacoustic conditions
+python scripts/generate_expanded_dataset_4conditions.py \
+    --data_dir data \
+    --base_clips_dir data/processed/base_1000ms_verified \
+    --output_dir data/processed/expanded_4conditions_verified
+```
+
+### Silero VAD Verification
+
+SPEECH clips are verified using Silero VAD to ensure >80% of the clip duration contains actual speech. This addresses the issue where some VoxConverse segments contain silence or non-speech audio.
+
+```python
+# From scripts/generate_base_clips_verified.py
+SPEECH_THRESHOLD = 0.8  # Require >80% speech ratio
+
+def check_speech_ratio(audio, sr=16000):
+    """Check speech ratio using Silero VAD."""
+    speech_timestamps = get_speech_timestamps(wav, vad_model, sampling_rate=16000)
+    speech_samples = sum(ts['end'] - ts['start'] for ts in speech_timestamps)
+    return speech_samples / duration_samples
+```
+
+### 4-Conditions Expansion
+
+Each verified base clip (1000ms) is transformed into 20 variants:
+- **8 duration variants**: Truncated to different lengths (20-1000ms)
+- **6 SNR variants**: Mixed with babble noise at different levels
+- **3 filter variants**: Bandpass, lowpass, highpass
+- **3 reverb variants**: Synthetic RIRs with T60 = 0.2, 0.6, 1.1s
+
+Total samples: 200 base clips × 20 conditions = 4000 samples per class (8000 total)
+
+### Training Pipeline (SLURM)
+
+```bash
+# 1. Generate verified dataset
+sbatch slurm/generate_verified_dataset.job
+
+# 2. Train LoRA on verified dataset
+sbatch slurm/train_lora_verified.job 42  # seed=42
+
+# 3. Run OPRO for BASE model
+sbatch slurm/opro_base_verified.job 42
+
+# 4. Run OPRO for LoRA model (depends on training)
+sbatch --dependency=afterok:$TRAIN_JOB_ID slurm/opro_lora_verified.job 42
+
+# 5. Evaluate all 4 combinations
+sbatch --dependency=afterok:$OPRO_JOBS slurm/eval_verified.job 42
+```
+
+### Evaluation Matrix
+
+The evaluation tests 4 combinations:
+
+| Configuration | Model | Prompt |
+|--------------|-------|--------|
+| BASE + Original | Qwen2-Audio (no LoRA) | Standard prompt |
+| BASE + OPRO | Qwen2-Audio (no LoRA) | OPRO-optimized prompt |
+| LoRA + Original | Qwen2-Audio + LoRA | Standard prompt |
+| LoRA + OPRO | Qwen2-Audio + LoRA | OPRO-optimized prompt |
+
+### Results (4-Conditions Non-Verified Dataset)
+
+| Configuration | Balanced Accuracy | Speech Acc | Nonspeech Acc |
+|--------------|------------------|------------|---------------|
+| BASE + Original | 70.83% | - | - |
+| BASE + OPRO | 71.67% | - | - |
+| LoRA + Original | 78.54% | - | - |
+| **LoRA + OPRO** | **86.88%** | - | - |
+
+**OPRO-optimized prompts found:**
+- BASE: `"Identify spoken words: A) SPEECH B) NON-SPEECH."`
+- LoRA: `"Short: Speech? YES or NO."`
+
+### Key Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/generate_base_clips_verified.py` | Extract 1000ms clips with Silero VAD verification |
+| `scripts/generate_expanded_dataset_4conditions.py` | Apply 4 psychoacoustic conditions |
+| `scripts/finetune_qwen_audio.py` | Train LoRA adapter |
+| `scripts/opro_classic_optimize.py` | OPRO prompt optimization |
+| `scripts/evaluate_with_generation.py` | Evaluate model with generation |
+
+### SLURM Job Files
+
+| Job | Purpose | Resources |
+|-----|---------|-----------|
+| `slurm/generate_verified_dataset.job` | Dataset generation | 1 GPU, 4h |
+| `slurm/train_lora_verified.job` | LoRA training | 1 GPU, 16h |
+| `slurm/opro_base_verified.job` | OPRO for BASE | 1 GPU, 8h |
+| `slurm/opro_lora_verified.job` | OPRO for LoRA | 1 GPU, 8h |
+| `slurm/eval_verified.job` | Full evaluation | 1 GPU, 6h |
+
+---
+
+*Last Updated: 2025-11-30*
+*Version: 2.0 (4-Conditions Pipeline)*

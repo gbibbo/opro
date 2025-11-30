@@ -1,0 +1,243 @@
+# Configuration Snapshot for 4-Conditions Pipeline
+# Generated: 2025-11-30
+
+# =============================================================================
+# Dataset Generation Configuration
+# =============================================================================
+
+dataset:
+  # Base clip extraction
+  base_clips:
+    script: scripts/generate_base_clips_verified.py
+    sample_rate: 16000
+    clip_duration_ms: 1000
+    speech_threshold: 0.8  # Silero VAD threshold
+    target_speech_clips: 200
+    target_nonspeech_clips: 200
+    seed: 42
+
+  # 4-Conditions expansion
+  expansion:
+    script: scripts/generate_expanded_dataset_4conditions.py
+
+    duration_conditions:
+      - 20ms
+      - 40ms
+      - 60ms
+      - 80ms
+      - 100ms
+      - 200ms
+      - 500ms
+      - 1000ms
+
+    snr_conditions:
+      - -10dB
+      - -5dB
+      - 0dB
+      - 5dB
+      - 10dB
+      - 20dB
+      noise_source: MUSAN_babble
+
+    filter_conditions:
+      telephony:
+        type: bandpass
+        lowcut: 300
+        highcut: 3400
+      lp3400:
+        type: lowpass
+        cutoff: 3400
+      hp300:
+        type: highpass
+        cutoff: 300
+
+    reverb_conditions:
+      - t60: 0.2  # Small room
+      - t60: 0.6  # Medium room
+      - t60: 1.1  # Large reverberant room
+
+  output_dirs:
+    base_clips: data/processed/base_1000ms_verified
+    expanded: data/processed/expanded_4conditions_verified
+
+# =============================================================================
+# LoRA Training Configuration
+# =============================================================================
+
+training:
+  script: scripts/finetune_qwen_audio.py
+  slurm_job: slurm/train_lora_verified.job
+
+  base_model: Qwen/Qwen2-Audio-7B-Instruct
+
+  hyperparameters:
+    seed: 42
+    num_epochs: 3
+    per_device_train_batch_size: 1
+    gradient_accumulation_steps: 16
+    learning_rate: 5e-5
+
+  lora:
+    r: 16
+    alpha: 32
+    target_modules:
+      - q_proj
+      - k_proj
+      - v_proj
+      - o_proj
+    dropout: 0.05
+
+  quantization:
+    load_in_4bit: true
+    bnb_4bit_compute_dtype: float16
+    bnb_4bit_quant_type: nf4
+
+  output_dir: checkpoints/qwen_lora_verified_seed${SEED}
+
+# =============================================================================
+# OPRO Configuration
+# =============================================================================
+
+opro:
+  script: scripts/opro_classic_optimize.py
+
+  # BASE model optimization
+  base:
+    slurm_job: slurm/opro_base_verified.job
+    use_lora: false
+    output_dir: results/opro_verified_base_seed${SEED}
+
+  # LoRA model optimization
+  lora:
+    slurm_job: slurm/opro_lora_verified.job
+    use_lora: true
+    checkpoint: checkpoints/qwen_lora_verified_seed${SEED}/final
+    output_dir: results/opro_verified_lora_seed${SEED}
+
+  # Shared OPRO parameters
+  parameters:
+    optimizer_llm: Qwen/Qwen2.5-7B-Instruct
+    optimizer_temperature: 0.9
+    num_iterations: 30
+    candidates_per_iter: 5
+    top_k: 15
+    early_stopping: 7
+    max_eval_samples: 1000
+    sample_strategy: stratified
+    initial_prompts: config/initial_prompts_diverse.json
+
+# =============================================================================
+# Evaluation Configuration
+# =============================================================================
+
+evaluation:
+  script: scripts/evaluate_with_generation.py
+  slurm_job: slurm/eval_verified.job
+
+  test_csv: data/processed/expanded_4conditions_verified/test_metadata.csv
+  output_dir: results/eval_verified_seed${SEED}
+
+  prompts:
+    original: "Is this short clip speech or noise? Your answer should be SPEECH or NON-SPEECH."
+    opro_base: results/opro_verified_base_seed${SEED}/best_prompt.txt
+    opro_lora: results/opro_verified_lora_seed${SEED}/best_prompt.txt
+
+  evaluation_matrix:
+    - name: BASE + Original
+      model: base
+      prompt: original
+      output: eval_base_original.csv
+    - name: BASE + OPRO
+      model: base
+      prompt: opro_base
+      output: eval_base_opro.csv
+    - name: LoRA + Original
+      model: lora
+      prompt: original
+      output: eval_lora_original.csv
+    - name: LoRA + OPRO
+      model: lora
+      prompt: opro_lora
+      output: eval_lora_opro.csv
+
+  metrics:
+    primary: balanced_accuracy
+    secondary:
+      - speech_accuracy
+      - nonspeech_accuracy
+      - overall_accuracy
+
+# =============================================================================
+# SLURM Resources
+# =============================================================================
+
+slurm:
+  partition: "3090"
+  resources:
+    generate_verified_dataset:
+      gpus: 1
+      cpus: 8
+      memory: 48G
+      time: "04:00:00"
+    train_lora_verified:
+      gpus: 1
+      cpus: 8
+      memory: 48G
+      time: "16:00:00"
+    opro_base_verified:
+      gpus: 1
+      cpus: 8
+      memory: 48G
+      time: "08:00:00"
+    opro_lora_verified:
+      gpus: 1
+      cpus: 8
+      memory: 48G
+      time: "08:00:00"
+    eval_verified:
+      gpus: 1
+      cpus: 8
+      memory: 48G
+      time: "06:00:00"
+
+# =============================================================================
+# Environment
+# =============================================================================
+
+environment:
+  conda_env: opro
+  python_version: "3.11"
+
+  key_packages:
+    - transformers>=4.37.0
+    - peft>=0.7.0
+    - torch>=2.0.0
+    - bitsandbytes
+    - accelerate
+    - soundfile
+    - librosa
+    - scipy
+    - pandas
+    - scikit-learn
+
+  cache_dirs:
+    HF_HOME: /mnt/fast/nobackup/users/$USER/.cache/huggingface
+    TRANSFORMERS_CACHE: $HF_HOME/transformers
+    HF_HUB_CACHE: $HF_HOME/hub
+
+  cuda:
+    PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+
+# =============================================================================
+# Reproducibility
+# =============================================================================
+
+reproducibility:
+  seeds_tested:
+    - 42    # Primary
+    - 123   # Validation
+    - 456   # Validation
+    - 789   # Validation
+    - 2024  # Validation
+
+  primary_seed: 42
