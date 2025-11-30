@@ -2,17 +2,26 @@
 """Quick verification of SPEECH samples using Silero VAD."""
 import pandas as pd
 import torch
-import torchaudio
+import soundfile as sf
+import numpy as np
 from pathlib import Path
 
 # Load Silero VAD
 model, utils = torch.hub.load('snakers4/silero-vad', 'silero_vad', force_reload=False)
-(get_speech_timestamps, _, read_audio, _, _) = utils
+(get_speech_timestamps, _, _, _, _) = utils
 
 def check_speech_ratio(audio_path, threshold=0.8):
     """Check if speech is present in at least threshold% of the clip."""
     try:
-        wav = read_audio(audio_path, sampling_rate=16000)
+        # Load with soundfile instead of torchaudio
+        audio, sr = sf.read(audio_path)
+        if len(audio.shape) > 1:
+            audio = audio.mean(axis=1)
+        # Resample to 16kHz if needed
+        if sr != 16000:
+            from scipy import signal
+            audio = signal.resample(audio, int(len(audio) * 16000 / sr))
+        wav = torch.tensor(audio, dtype=torch.float32)
         duration_samples = len(wav)
 
         speech_timestamps = get_speech_timestamps(wav, model, sampling_rate=16000)
