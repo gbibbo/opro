@@ -1,0 +1,95 @@
+#!/bin/bash
+#SBATCH --job-name=opro_lora_v
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=08:00:00
+#SBATCH --output=logs/opro_lora_v_%j.out
+#SBATCH --error=logs/opro_lora_v_%j.err
+
+# OPRO for LoRA model on VERIFIED dataset
+
+set -euo pipefail
+
+SEED=${1:-42}
+
+echo "============================================"
+echo "OPRO LORA MODEL - VERIFIED DATASET"
+echo "============================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Seed: $SEED"
+echo "Start time: $(date)"
+echo "============================================"
+
+mkdir -p logs
+
+export HF_HOME="/mnt/fast/nobackup/users/$USER/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HOME/hub"
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
+conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda"; exit 1; }
+echo "Conda environment: $CONDA_DEFAULT_ENV"
+
+pip install bitsandbytes peft pandas pyarrow --quiet 2>/dev/null || true
+
+nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
+
+MANIFEST="data/processed/expanded_4conditions_verified/dev_metadata.csv"
+LORA_CHECKPOINT="checkpoints/qwen_lora_verified_seed${SEED}/final"
+OUTPUT_DIR="results/opro_verified_lora_seed${SEED}"
+
+if [ ! -f "$MANIFEST" ]; then
+    echo "ERROR: Dev manifest not found at $MANIFEST"
+    exit 1
+fi
+
+if [ ! -d "$LORA_CHECKPOINT" ]; then
+    echo "ERROR: LoRA checkpoint not found at $LORA_CHECKPOINT"
+    exit 1
+fi
+
+mkdir -p "$OUTPUT_DIR"
+
+echo ""
+echo "Configuration:"
+echo "  Manifest: $MANIFEST"
+echo "  LoRA checkpoint: $LORA_CHECKPOINT"
+echo "  Output: $OUTPUT_DIR"
+echo ""
+
+python scripts/opro_classic_optimize.py \
+    --manifest "$MANIFEST" \
+    --split dev \
+    --output_dir "$OUTPUT_DIR" \
+    --checkpoint "$LORA_CHECKPOINT" \
+    --optimizer_llm "Qwen/Qwen2.5-7B-Instruct" \
+    --optimizer_temperature 0.9 \
+    --num_iterations 30 \
+    --candidates_per_iter 5 \
+    --top_k 15 \
+    --early_stopping 7 \
+    --max_eval_samples 1000 \
+    --sample_strategy stratified \
+    --initial_prompts_json config/initial_prompts_diverse.json \
+    --seed $SEED
+
+EXIT_CODE=$?
+
+echo ""
+echo "============================================"
+echo "OPRO COMPLETE"
+echo "============================================"
+echo "Exit code: $EXIT_CODE"
+echo "End time: $(date)"
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo "Best prompt:"
+    cat "$OUTPUT_DIR/best_prompt.txt" 2>/dev/null || echo "(not found)"
+fi
+
+exit $EXIT_CODE

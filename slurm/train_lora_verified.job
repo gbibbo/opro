@@ -1,0 +1,89 @@
+#!/bin/bash
+#SBATCH --job-name=train_ver
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=16:00:00
+#SBATCH --output=logs/train_ver_%j.out
+#SBATCH --error=logs/train_ver_%j.err
+
+# Train LoRA on VERIFIED 4-Condition Dataset
+
+set -euo pipefail
+
+SEED=${1:-42}
+
+echo "============================================"
+echo "TRAIN LORA ON VERIFIED DATASET"
+echo "============================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Seed: $SEED"
+echo "Start time: $(date)"
+echo "============================================"
+
+mkdir -p logs
+
+export HF_HOME="/mnt/fast/nobackup/users/$USER/.cache/huggingface"
+export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+export HF_HUB_CACHE="$HF_HOME/hub"
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE"
+
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
+conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda"; exit 1; }
+echo "Conda environment: $CONDA_DEFAULT_ENV"
+
+pip install bitsandbytes peft accelerate transformers --quiet 2>/dev/null || true
+
+nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
+
+# VERIFIED dataset paths
+TRAIN_CSV="data/processed/expanded_4conditions_verified/train_metadata.csv"
+VAL_CSV="data/processed/expanded_4conditions_verified/dev_metadata.csv"
+OUTPUT_DIR="checkpoints/qwen_lora_verified_seed${SEED}"
+
+if [ ! -f "$TRAIN_CSV" ]; then
+    echo "ERROR: Training data not found at $TRAIN_CSV"
+    exit 1
+fi
+
+TRAIN_COUNT=$(wc -l < "$TRAIN_CSV")
+VAL_COUNT=$(wc -l < "$VAL_CSV")
+echo ""
+echo "Dataset (VERIFIED):"
+echo "  Train: $((TRAIN_COUNT - 1)) samples"
+echo "  Val: $((VAL_COUNT - 1)) samples"
+echo "  Output: $OUTPUT_DIR"
+echo ""
+
+mkdir -p "$OUTPUT_DIR"
+
+python scripts/finetune_qwen_audio.py \
+    --seed $SEED \
+    --output_dir "$OUTPUT_DIR" \
+    --train_csv "$TRAIN_CSV" \
+    --val_csv "$VAL_CSV" \
+    --num_epochs 3 \
+    --per_device_train_batch_size 1 \
+    --gradient_accumulation_steps 16 \
+    --learning_rate 5e-5 \
+    --lora_r 16 \
+    --lora_alpha 32
+
+EXIT_CODE=$?
+
+echo ""
+echo "============================================"
+echo "TRAINING COMPLETE"
+echo "============================================"
+echo "Exit code: $EXIT_CODE"
+echo "End time: $(date)"
+
+if [ $EXIT_CODE -eq 0 ]; then
+    echo "Model saved to: $OUTPUT_DIR"
+    ls -la "$OUTPUT_DIR"/final/ 2>/dev/null || ls -la "$OUTPUT_DIR"/ 2>/dev/null
+fi
+
+exit $EXIT_CODE
