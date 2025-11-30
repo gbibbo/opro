@@ -588,6 +588,7 @@ class Qwen2AudioClassifier:
             "DOES NOT CONTAIN",
             "NO AUDIO",
             "NOT DETECTED",
+            "NO",  # Simple "NO" response for YES/NO prompts
         ]
         if any(pattern in response_normalized for pattern in negation_patterns):
             return "NONSPEECH", 0.8
