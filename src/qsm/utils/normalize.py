@@ -80,21 +80,20 @@ def normalize_to_binary(
 
         # For NONSPEECH, check multiple formats
         if verb == "NONSPEECH":
-            if ("NONSPEECH" in text_clean or
-                "NON-SPEECH" in text_clean or
-                "NO SPEECH" in text_clean):
+            if "NONSPEECH" in text_clean or "NON-SPEECH" in text_clean or "NO SPEECH" in text_clean:
                 return "NONSPEECH", confidence
 
         # For SPEECH, only match if not part of NONSPEECH/NON-SPEECH/NO ... SPEECH
         elif verb == "SPEECH":
             # Check for negation patterns like "NO SPEECH", "NO HUMAN SPEECH", "NO ... SPEECH"
             import re as re_check
+
             has_negation = (
-                "NONSPEECH" in text_clean or
-                "NON-SPEECH" in text_clean or
-                "NO SPEECH" in text_clean or
-                re_check.search(r'\bNO\b.*\bSPEECH\b', text_clean) or  # "NO ... SPEECH"
-                text_clean.startswith("NO,")  # "No, there is no..."
+                "NONSPEECH" in text_clean
+                or "NON-SPEECH" in text_clean
+                or "NO SPEECH" in text_clean
+                or re_check.search(r"\bNO\b.*\bSPEECH\b", text_clean)  # "NO ... SPEECH"
+                or text_clean.startswith("NO,")  # "No, there is no..."
             )
 
             if "SPEECH" in text_clean and not has_negation:
@@ -115,21 +114,31 @@ def normalize_to_binary(
 
     # Priority 3: Yes/No responses (use word boundaries to avoid false matches)
     yes_patterns = ["YES", "SÍ", "AFFIRMATIVE", "TRUE", "CORRECT"]
-    no_patterns = ["NO", "NEGATIVE", "FALSE", "INCORRECT", "ABSENT", "NOT PRESENT", "IS NOT PRESENT"]
+    no_patterns = [
+        "NO",
+        "NEGATIVE",
+        "FALSE",
+        "INCORRECT",
+        "ABSENT",
+        "NOT PRESENT",
+        "IS NOT PRESENT",
+    ]
 
     # Use word boundary matching to avoid false positives (e.g., "SI" in "SILENCE")
     import re as regex_module
 
     # First check for NO patterns (higher priority to avoid "NO ... PRESENT" matching "PRESENT")
     for pattern in no_patterns:
-        if regex_module.search(r'\b' + regex_module.escape(pattern) + r'\b', text_clean):
+        if regex_module.search(r"\b" + regex_module.escape(pattern) + r"\b", text_clean):
             return "NONSPEECH", confidence * 0.95
 
     # Then check for YES patterns (but skip if there's a negation context)
     for pattern in yes_patterns:
-        if regex_module.search(r'\b' + regex_module.escape(pattern) + r'\b', text_clean):
+        if regex_module.search(r"\b" + regex_module.escape(pattern) + r"\b", text_clean):
             # Double-check for negation context like "NO ... TRUE" or "NOT ... CORRECT"
-            has_negation_context = regex_module.search(r'\b(NO|NOT)\b.*\b' + regex_module.escape(pattern) + r'\b', text_clean)
+            has_negation_context = regex_module.search(
+                r"\b(NO|NOT)\b.*\b" + regex_module.escape(pattern) + r"\b", text_clean
+            )
             if not has_negation_context:
                 return "SPEECH", confidence * 0.95  # Slightly lower confidence for yes/no
 
