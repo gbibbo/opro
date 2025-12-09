@@ -24,7 +24,7 @@ echo "Start time: $(date)"
 echo ""
 
 # Activate conda environment
-source ~/.bashrc
+eval "$(conda shell.bash hook)"
 conda activate opro
 
 # Set cache directories
