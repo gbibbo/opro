@@ -24,8 +24,8 @@ echo "Start time: $(date)"
 echo ""
 
 # Activate conda environment
-eval "$(conda shell.bash hook)"
-conda activate opro
+source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || source ~/.bashrc
+conda activate opro || conda activate qwen_audio || { echo "ERROR: Could not activate conda"; exit 1; }
 
 # Set cache directories
 export HF_HOME=/mnt/fast/nobackup/users/$USER/.cache/huggingface
