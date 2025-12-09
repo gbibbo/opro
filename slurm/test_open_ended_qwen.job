@@ -1,0 +1,98 @@
+#!/bin/bash
+#SBATCH --job-name=test_open_qwen
+#SBATCH --partition=3090
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=48G
+#SBATCH --time=01:00:00
+#SBATCH --output=logs/test_open_qwen_%j.out
+#SBATCH --error=logs/test_open_qwen_%j.err
+
+# Test open-ended prompts with Qwen2-Audio on real audio samples
+#
+# Usage:
+#   sbatch slurm/test_open_ended_qwen.job
+
+set -e  # Exit on error
+
+echo "========================================================================"
+echo "TEST OPEN-ENDED PROMPTS WITH QWEN2-AUDIO"
+echo "========================================================================"
+echo "Job ID: $SLURM_JOB_ID"
+echo "Node: $SLURM_NODELIST"
+echo "Start time: $(date)"
+echo ""
+
+# Activate conda environment
+source ~/.bashrc
+conda activate opro
+
+# Set cache directories
+export HF_HOME=/mnt/fast/nobackup/users/$USER/.cache/huggingface
+export TRANSFORMERS_CACHE=$HF_HOME/transformers
+export HF_HUB_CACHE=$HF_HOME/hub
+
+# CUDA settings
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+# Navigate to project directory
+cd /mnt/fast/nobackup/users/$USER/opro
+
+echo "Environment:"
+echo "  Conda env: $CONDA_DEFAULT_ENV"
+echo "  Python: $(which python)"
+echo "  HF_HOME: $HF_HOME"
+echo ""
+
+# Create output directory
+mkdir -p results/test_open_ended
+
+# Run test with base model (no LoRA)
+echo "========================================================================"
+echo "TEST 1: BASE MODEL (no LoRA)"
+echo "========================================================================"
+
+python scripts/test_open_ended_qwen.py \
+    --manifest data/processed/grouped_split/test_metadata.csv \
+    --n_samples 3 \
+    --output results/test_open_ended/base_model_results.json \
+    --seed 42
+
+echo ""
+echo "BASE model test complete!"
+echo ""
+
+# Run test with LoRA checkpoint (if it exists)
+LORA_CHECKPOINT="checkpoints/ablations/LORA_attn_mlp/seed_42/final"
+
+if [ -d "$LORA_CHECKPOINT" ]; then
+    echo "========================================================================"
+    echo "TEST 2: LORA MODEL"
+    echo "========================================================================"
+
+    python scripts/test_open_ended_qwen.py \
+        --manifest data/processed/grouped_split/test_metadata.csv \
+        --n_samples 3 \
+        --checkpoint $LORA_CHECKPOINT \
+        --output results/test_open_ended/lora_model_results.json \
+        --seed 42
+
+    echo ""
+    echo "LoRA model test complete!"
+else
+    echo "LoRA checkpoint not found: $LORA_CHECKPOINT"
+    echo "Skipping LoRA test."
+fi
+
+echo ""
+echo "========================================================================"
+echo "ALL TESTS COMPLETE"
+echo "========================================================================"
+echo "End time: $(date)"
+echo ""
+echo "Results saved to:"
+echo "  - results/test_open_ended/base_model_results.json"
+echo "  - results/test_open_ended/lora_model_results.json"
+echo ""
+echo "To download results:"
+echo "  scp aisurrey:/mnt/fast/nobackup/users/$USER/opro/results/test_open_ended/*.json ."
