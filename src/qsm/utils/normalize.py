@@ -85,12 +85,19 @@ def normalize_to_binary(
                 "NO SPEECH" in text_clean):
                 return "NONSPEECH", confidence
 
-        # For SPEECH, only match if not part of NONSPEECH/NON-SPEECH
+        # For SPEECH, only match if not part of NONSPEECH/NON-SPEECH/NO ... SPEECH
         elif verb == "SPEECH":
-            if ("SPEECH" in text_clean and
-                "NONSPEECH" not in text_clean and
-                "NON-SPEECH" not in text_clean and
-                "NO SPEECH" not in text_clean):
+            # Check for negation patterns like "NO SPEECH", "NO HUMAN SPEECH", "NO ... SPEECH"
+            import re as re_check
+            has_negation = (
+                "NONSPEECH" in text_clean or
+                "NON-SPEECH" in text_clean or
+                "NO SPEECH" in text_clean or
+                re_check.search(r'\bNO\b.*\bSPEECH\b', text_clean) or  # "NO ... SPEECH"
+                text_clean.startswith("NO,")  # "No, there is no..."
+            )
+
+            if "SPEECH" in text_clean and not has_negation:
                 return "SPEECH", confidence
 
     # Priority 2: Letter mapping (A/B/C/D)
@@ -107,18 +114,24 @@ def normalize_to_binary(
                 return label, confidence
 
     # Priority 3: Yes/No responses (use word boundaries to avoid false matches)
-    yes_patterns = ["YES", "SÍ", "AFFIRMATIVE", "TRUE", "CORRECT", "PRESENT"]
-    no_patterns = ["NO", "NEGATIVE", "FALSE", "INCORRECT", "ABSENT", "NOT PRESENT"]
+    yes_patterns = ["YES", "SÍ", "AFFIRMATIVE", "TRUE", "CORRECT"]
+    no_patterns = ["NO", "NEGATIVE", "FALSE", "INCORRECT", "ABSENT", "NOT PRESENT", "IS NOT PRESENT"]
 
     # Use word boundary matching to avoid false positives (e.g., "SI" in "SILENCE")
     import re as regex_module
-    for pattern in yes_patterns:
-        if regex_module.search(r'\b' + regex_module.escape(pattern) + r'\b', text_clean):
-            return "SPEECH", confidence * 0.95  # Slightly lower confidence for yes/no
 
+    # First check for NO patterns (higher priority to avoid "NO ... PRESENT" matching "PRESENT")
     for pattern in no_patterns:
         if regex_module.search(r'\b' + regex_module.escape(pattern) + r'\b', text_clean):
             return "NONSPEECH", confidence * 0.95
+
+    # Then check for YES patterns (but skip if there's a negation context)
+    for pattern in yes_patterns:
+        if regex_module.search(r'\b' + regex_module.escape(pattern) + r'\b', text_clean):
+            # Double-check for negation context like "NO ... TRUE" or "NOT ... CORRECT"
+            has_negation_context = regex_module.search(r'\b(NO|NOT)\b.*\b' + regex_module.escape(pattern) + r'\b', text_clean)
+            if not has_negation_context:
+                return "SPEECH", confidence * 0.95  # Slightly lower confidence for yes/no
 
     # Priority 4: Synonyms and semantic content
     speech_synonyms = [
@@ -140,6 +153,17 @@ def normalize_to_binary(
         "syllables",
         "phonemes",
         "formants",
+        # Laughter and vocalizations
+        "laughter",
+        "laugh",
+        "laughing",
+        "giggle",
+        "giggling",
+        "chuckle",
+        "chuckling",
+        # Singing (vocal but musical)
+        "singing",
+        "sing",
     ]
 
     nonspeech_synonyms = [
@@ -172,16 +196,41 @@ def normalize_to_binary(
         "clock",
         "tick",
         "ticking",
+        # Mechanical and vehicle sounds
+        "engine",
+        "motor",
+        "vehicle",
+        "car",
+        "truck",
+        "bus",
+        "siren",
+        "accelerating",
+        "revving",
+        "idling",
+        "speeding",
+        # Other sound effects
+        "spray",
+        "splash",
+        "power tool",
+        "effect",
+        "sound effect",
+        "ringtone",
+        "telephone",
     ]
 
     # Count matches
     speech_score = sum(1 for syn in speech_synonyms if syn in text_lower)
     nonspeech_score = sum(1 for syn in nonspeech_synonyms if syn in text_lower)
 
+    # Tie-breaker: if both have matches, favor speech (human vocalizations are primary)
+    # This handles cases like "background noise followed by laughter" → SPEECH
     if speech_score > nonspeech_score:
         return "SPEECH", confidence * 0.8  # Lower confidence for synonym matching
     elif nonspeech_score > speech_score:
         return "NONSPEECH", confidence * 0.8
+    elif speech_score > 0 and speech_score == nonspeech_score:
+        # Tie: both present, favor speech with lower confidence
+        return "SPEECH", confidence * 0.6
 
     # Priority 5: Unknown/unparseable
     return None, 0.0

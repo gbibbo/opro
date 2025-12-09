@@ -26,6 +26,12 @@ def test_normalization():
         ("Spoken words", "SPEECH"),
         ("Vocal sounds", "SPEECH"),
 
+        # Laughter and vocalizations (NEW - previously failed)
+        ("Laughter.", "SPEECH"),
+        ("I heard laughter and the sound of water splashing.", "SPEECH"),
+        ("There is a background noise followed by laughter.", "SPEECH"),
+        ("I heard giggling", "SPEECH"),
+
         # Non-speech responses
         ("I hear music", "NONSPEECH"),
         ("It's just noise", "NONSPEECH"),
@@ -34,6 +40,19 @@ def test_normalization():
         ("Beeping sounds", "NONSPEECH"),
         ("Musical instrument", "NONSPEECH"),
         ("Clock ticking", "NONSPEECH"),
+
+        # Mechanical and vehicle sounds (NEW - previously failed)
+        ("I heard an engine accelerating and revving", "NONSPEECH"),
+        ("It's a car engine starting and revving.", "NONSPEECH"),
+        ("The sound is that of an engine idling loudly.", "NONSPEECH"),
+        ("I heard the sound of a motor vehicle on the road", "NONSPEECH"),
+        ("It's a sound effect.", "NONSPEECH"),
+        ("There is a sound of liquid spraying and gushing.", "NONSPEECH"),
+
+        # Negations (NEW - previously failed critically)
+        ("No, there is no human speech in this audio.", "NONSPEECH"),
+        ("No, the transcription is empty indicating no speech content.", "NONSPEECH"),
+        ("No, the transcription is empty indicating no human speech is present.", "NONSPEECH"),
 
         # Constrained responses (should still work)
         ("SPEECH", "SPEECH"),

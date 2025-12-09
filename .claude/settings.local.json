@@ -68,7 +68,11 @@
       "Bash(tar:*)",
       "Bash(for f in data/processed/base_1000ms/*.csv)",
       "Bash(ssh:*)",
-      "Bash(scp:*)"
+      "Bash(scp:*)",
+      "Bash(python3:*)",
+      "Bash(bash -c 'ssh aisurrey \"\"pwd\"\" 2>&1')",
+      "Bash(ssh-add:*)",
+      "Bash(export SSH_AUTH_SOCK=/tmp/ssh-XXXX/agent.$$)"
     ],
     "deny": [],
     "ask": []
