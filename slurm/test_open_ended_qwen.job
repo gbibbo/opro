@@ -53,7 +53,7 @@ echo "TEST 1: BASE MODEL (no LoRA)"
 echo "========================================================================"
 
 python scripts/test_open_ended_qwen.py \
-    --manifest data/processed/grouped_split/test_metadata.csv \
+    --manifest data/processed/expanded_4conditions_verified/test_metadata.csv \
     --n_samples 3 \
     --output results/test_open_ended/base_model_results.json \
     --seed 42
@@ -63,7 +63,7 @@ echo "BASE model test complete!"
 echo ""
 
 # Run test with LoRA checkpoint (if it exists)
-LORA_CHECKPOINT="checkpoints/ablations/LORA_attn_mlp/seed_42/final"
+LORA_CHECKPOINT="checkpoints/qwen_lora_verified_seed42/final"
 
 if [ -d "$LORA_CHECKPOINT" ]; then
     echo "========================================================================"
@@ -71,7 +71,7 @@ if [ -d "$LORA_CHECKPOINT" ]; then
     echo "========================================================================"
 
     python scripts/test_open_ended_qwen.py \
-        --manifest data/processed/grouped_split/test_metadata.csv \
+        --manifest data/processed/expanded_4conditions_verified/test_metadata.csv \
         --n_samples 3 \
         --checkpoint $LORA_CHECKPOINT \
         --output results/test_open_ended/lora_model_results.json \
