@@ -180,9 +180,13 @@ class LocalLLMGenerator:
 # ============================================================================
 
 
-def sanitize_prompt(prompt: str) -> tuple[str, bool]:
+def sanitize_prompt(prompt: str, allow_open_ended: bool = False) -> tuple[str, bool]:
     """
     Sanitize and validate prompt candidate.
+
+    Args:
+        prompt: Prompt text to validate
+        allow_open_ended: If True, allow open-ended prompts without explicit SPEECH/NON-SPEECH keywords
 
     Returns:
         (cleaned_prompt, is_valid)
@@ -214,11 +218,23 @@ def sanitize_prompt(prompt: str) -> tuple[str, bool]:
         print(f"      ⚠️  Rejected: Too long ({len(cleaned)} chars)")
         return cleaned, False
 
-    # Must contain SPEECH and NON-SPEECH keywords
     upper = cleaned.upper()
-    if "SPEECH" not in upper or "NON-SPEECH" not in upper:
-        if "SPEECH" not in upper and "NONSPEECH" not in upper:
-            print("      ⚠️  Rejected: Missing SPEECH/NON-SPEECH keywords")
+
+    # For constrained prompts: must contain SPEECH and NON-SPEECH keywords
+    # For open-ended: allow questions like "What do you hear?" without explicit keywords
+    if not allow_open_ended:
+        # Must contain SPEECH and NON-SPEECH keywords
+        if "SPEECH" not in upper or "NON-SPEECH" not in upper:
+            if "SPEECH" not in upper and "NONSPEECH" not in upper:
+                print("      ⚠️  Rejected: Missing SPEECH/NON-SPEECH keywords (use --allow_open_ended for open prompts)")
+                return cleaned, False
+    else:
+        # For open-ended prompts, check that it's a question or instruction about audio
+        audio_keywords = ["AUDIO", "SOUND", "HEAR", "LISTEN", "WHAT", "DESCRIBE", "IDENTIFY", "CLASSIFY"]
+        has_audio_reference = any(keyword in upper for keyword in audio_keywords)
+
+        if not has_audio_reference:
+            print("      ⚠️  Rejected: Open-ended prompt must reference audio/sound")
             return cleaned, False
 
     # Remove multiple spaces and newlines
@@ -254,6 +270,7 @@ class OPROClassicOptimizer:
         initial_prompts: list[str] = None,
         max_new_tokens: int = 2000,
         temperature: float = 0.7,
+        allow_open_ended: bool = False,
     ):
         """
         Initialize OPRO optimizer with local LLM.
@@ -275,6 +292,7 @@ class OPROClassicOptimizer:
         self.top_k = top_k
         self.candidates_per_iter = candidates_per_iter
         self.seed = seed
+        self.allow_open_ended = allow_open_ended
 
         # Default reward weights
         if reward_weights is None:
@@ -317,6 +335,7 @@ class OPROClassicOptimizer:
         print(f"  Candidates/iter: {candidates_per_iter}")
         print(f"  Reward weights: {reward_weights}")
         print(f"  Seed: {seed}")
+        print(f"  Mode: {'Open-ended + Constrained' if allow_open_ended else 'Constrained only (SPEECH/NON-SPEECH keywords required)'}")
 
     def compute_reward(self, ba_clip: float, ba_conditions: float, prompt_length: int) -> float:
         """Compute reward for a prompt."""
@@ -340,8 +359,26 @@ class OPROClassicOptimizer:
             history_str += f"\n{i}. Reward={candidate.reward:.4f} | BA_clip={candidate.ba_clip:.3f} | BA_cond={candidate.ba_conditions:.3f}\n"
             history_str += f'   "{clean_prompt}"\n'
 
-        # Build diverse style examples
-        style_examples = """
+        # Build diverse style examples based on mode
+        if self.allow_open_ended:
+            style_examples = """
+STYLE EXAMPLES (use these as inspiration for DIVERSITY):
+- Constrained Binary: "Does this audio contain human speech? Answer: SPEECH or NON-SPEECH."
+- A/B Choice: "Choose: A) SPEECH B) NON-SPEECH. Answer with A or B."
+- Open Question: "What do you hear in this audio?"
+- Open Identification: "Describe what sound is in this clip."
+- Open Classification: "Listen carefully and tell me what type of audio this is."
+- Open Yes/No: "Is there human speech in this audio?"
+- Minimal Open: "What is this sound?"
+- Contextual Open: "This may be noisy or brief. What do you hear?"
+
+NOTE: For OPEN-ENDED prompts (questions without explicit SPEECH/NON-SPEECH keywords):
+- Responses mentioning "speech", "voice", "talking", "spoken" → mapped to SPEECH
+- Responses mentioning "music", "noise", "silence", "beep" → mapped to NONSPEECH
+- The model's answer will be automatically classified using synonym matching
+"""
+        else:
+            style_examples = """
 STYLE EXAMPLES (use these as inspiration for DIVERSITY):
 - Question: "Does this audio contain human speech? Answer: SPEECH or NON-SPEECH."
 - Command: "Classify this audio. Output: SPEECH or NON-SPEECH."
@@ -386,7 +423,8 @@ Each of your {self.candidates_per_iter} prompts MUST be SUBSTANTIALLY DIFFERENT 
 
 CONSTRAINTS:
 - Each prompt must be COMPLETE and STANDALONE (no placeholders)
-- Must specify binary output format (SPEECH/NON-SPEECH, A/B, etc.)
+- For constrained prompts: Must specify binary output format (SPEECH/NON-SPEECH, A/B, etc.)
+- For open-ended prompts: Can be questions like "What do you hear?" (responses auto-mapped via synonyms)
 - Avoid overly complex multi-step instructions
 - Plain text only (NO special tokens, NO markup)
 - Length: 20-300 characters
@@ -450,7 +488,7 @@ Generate {self.candidates_per_iter} DIVERSE prompts now:"""
 
         for i, prompt_raw in enumerate(candidates_raw, 1):
             print(f"    Candidate {i}: {prompt_raw[:60]}{'...' if len(prompt_raw) > 60 else ''}")
-            cleaned, is_valid = sanitize_prompt(prompt_raw)
+            cleaned, is_valid = sanitize_prompt(prompt_raw, allow_open_ended=self.allow_open_ended)
 
             if is_valid:
                 candidates_clean.append(cleaned)
@@ -1185,6 +1223,14 @@ def main():
         default=42,
     )
 
+    # Open-ended prompts
+    parser.add_argument(
+        "--allow_open_ended",
+        action="store_true",
+        help="Allow open-ended prompts (e.g., 'What do you hear?') in addition to constrained formats. "
+        "Responses will be mapped to SPEECH/NONSPEECH via synonym matching.",
+    )
+
     args = parser.parse_args()
 
     output_dir = Path(args.output_dir)
@@ -1238,6 +1284,7 @@ def main():
         initial_prompts=initial_prompts,
         max_new_tokens=args.optimizer_max_new_tokens,
         temperature=args.optimizer_temperature,
+        allow_open_ended=args.allow_open_ended,
     )
 
     # Run optimization

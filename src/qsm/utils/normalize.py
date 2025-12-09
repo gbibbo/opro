@@ -69,20 +69,29 @@ def normalize_to_binary(
             confidence = probs["p_first_token"]
 
     # Priority 1: Exact match with verbalizers (highest priority)
-    for verb in verbalizers:
-        if verb.upper() in text_clean:
-            # Check it's not negated
-            if "NOT " + verb.upper() in text_clean or "NO " + verb.upper() in text_clean:
-                continue
-            # Semantic label wins over letter
-            if verb.upper() == "SPEECH":
-                return "SPEECH", confidence
-            elif (
-                verb.upper() == "NONSPEECH"
-                or "NON-SPEECH" in text_clean
-                or "NO SPEECH" in text_clean
-            ):
+    # Check for NONSPEECH first to avoid substring issues (SPEECH in NON-SPEECH)
+    for verb in ["NONSPEECH", "SPEECH"]:
+        if verb not in [v.upper() for v in verbalizers]:
+            continue
+
+        # Check it's not negated
+        if "NOT " + verb in text_clean or "NO " + verb in text_clean:
+            continue
+
+        # For NONSPEECH, check multiple formats
+        if verb == "NONSPEECH":
+            if ("NONSPEECH" in text_clean or
+                "NON-SPEECH" in text_clean or
+                "NO SPEECH" in text_clean):
                 return "NONSPEECH", confidence
+
+        # For SPEECH, only match if not part of NONSPEECH/NON-SPEECH
+        elif verb == "SPEECH":
+            if ("SPEECH" in text_clean and
+                "NONSPEECH" not in text_clean and
+                "NON-SPEECH" not in text_clean and
+                "NO SPEECH" not in text_clean):
+                return "SPEECH", confidence
 
     # Priority 2: Letter mapping (A/B/C/D)
     if mapping:
@@ -97,16 +106,18 @@ def normalize_to_binary(
                     confidence = probs[letter]
                 return label, confidence
 
-    # Priority 3: Yes/No responses
-    yes_patterns = ["YES", "SÍ", "SI", "AFFIRMATIVE", "TRUE", "CORRECT", "PRESENT"]
+    # Priority 3: Yes/No responses (use word boundaries to avoid false matches)
+    yes_patterns = ["YES", "SÍ", "AFFIRMATIVE", "TRUE", "CORRECT", "PRESENT"]
     no_patterns = ["NO", "NEGATIVE", "FALSE", "INCORRECT", "ABSENT", "NOT PRESENT"]
 
+    # Use word boundary matching to avoid false positives (e.g., "SI" in "SILENCE")
+    import re as regex_module
     for pattern in yes_patterns:
-        if pattern in text_clean:
+        if regex_module.search(r'\b' + regex_module.escape(pattern) + r'\b', text_clean):
             return "SPEECH", confidence * 0.95  # Slightly lower confidence for yes/no
 
     for pattern in no_patterns:
-        if pattern in text_clean:
+        if regex_module.search(r'\b' + regex_module.escape(pattern) + r'\b', text_clean):
             return "NONSPEECH", confidence * 0.95
 
     # Priority 4: Synonyms and semantic content
